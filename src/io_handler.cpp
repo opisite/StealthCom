@@ -6,11 +6,12 @@
 #include <string>
 #include <mutex>
 
-#include "output_queue.h"
+#include "message_queue.h"
+#include "stealthcom_logic.h"
 
 #define INPUT_BUFFER_SIZE 256
 
-static OutputQueue *msg_queue;
+static MessageQueue *output_queue;
 
 static WINDOW *input_win;
 static WINDOW *message_win;
@@ -33,20 +34,20 @@ void io_init() {
     input = new char[INPUT_BUFFER_SIZE];
     memset(input, 0, INPUT_BUFFER_SIZE);
 
-    msg_queue = new OutputQueue();
+    output_queue = new MessageQueue();
 }
 
 void io_clr_output() {
     wclear(message_win);
 }
 
-void io_push_msg(const std::string message) {
-    msg_queue->push(message);
+void output_push_msg(const std::string message) {
+    output_queue->push(message);
 }
 
 void output_thread() {
     while (true) {
-        std::string msg = msg_queue->pop();
+        std::string msg = output_queue->pop();
         wprintw(message_win, "%s\n", msg.c_str());
         wrefresh(message_win);
     }
@@ -71,7 +72,8 @@ void input_thread() {
             if (std::strcmp(input, "exit") == 0) {
                 break;
             }
-
+            
+            input_push_msg(input);
             input_index = 0;
             memset(input, 0, INPUT_BUFFER_SIZE);
         } else if (c >= 32 && c < 127 && input_index < INPUT_BUFFER_SIZE - 1) {

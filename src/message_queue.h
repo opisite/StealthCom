@@ -1,5 +1,5 @@
-#ifndef OUTPUT_QUEUE_H
-#define OUTPUT_QUEUE_H
+#ifndef MESSAGE_QUEUE_H
+#define MESSAGE_QUEUE_H
 
 #include <string>
 #include <queue>
@@ -7,7 +7,7 @@
 #include <condition_variable>
 #include <memory>
 
-class OutputQueue {
+class MessageQueue {
 public:
     void push(std::string msg);
     std::string pop();

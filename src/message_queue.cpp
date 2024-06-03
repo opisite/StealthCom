@@ -1,6 +1,6 @@
-#include "output_queue.h"
+#include "message_queue.h"
 
-void OutputQueue::push(std::string msg) {
+void MessageQueue::push(std::string msg) {
     {
         std::lock_guard<std::mutex> lock(mtx);
         queue.push(std::move(msg));
@@ -8,7 +8,7 @@ void OutputQueue::push(std::string msg) {
     cv.notify_one();
 }
 
-std::string OutputQueue::pop() {
+std::string MessageQueue::pop() {
     std::unique_lock<std::mutex> lock(mtx);
     cv.wait(lock, [this] { return !queue.empty(); });
     auto msg = std::move(queue.front());
