@@ -4,14 +4,22 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <memory>
 
 struct packet_wrapper {
     const char *buf;
     int buf_len;
 };
 
-extern std::queue<std::unique_ptr<struct packet_wrapper>> destQueue;
-extern std::mutex queueMutex; 
-extern std::condition_variable queueCV;
+class PacketQueue {
+public:
+    void push(std::unique_ptr<packet_wrapper> packet);
+    std::unique_ptr<packet_wrapper> pop();
+
+private:
+    std::queue<std::unique_ptr<packet_wrapper>> queue;
+    std::mutex mtx;
+    std::condition_variable cv;
+};
 
 #endif

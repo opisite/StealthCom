@@ -7,10 +7,19 @@
 #include "utils.h"
 #include "packet_queue.h"
 
-void handle_packet(const stealthcom_header_t *pkt) {
+static std::shared_ptr<PacketQueue> rx_queue;
+static std::shared_ptr<PacketQueue> tx_queue;
+
+void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
+    rx_queue = rx;
+    tx_queue = tx;
+
     // TODO
 }
 
+void handle_packet(const stealthcom_header_t *pkt) {
+    // TODO
+}
 
 void user_advertise_thread() {
     static struct __attribute__((packed)) stealthcom_probe_request_t {
@@ -41,11 +50,7 @@ void user_advertise_thread() {
 
         memcpy((void*)(packet->buf), &stealthcom_probe_request, sizeof(stealthcom_probe_request));
 
-        {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            destQueue.push(std::move(packet));
-            queueCV.notify_one();
-        }
+        tx_queue->push(std::move(packet));
 
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }

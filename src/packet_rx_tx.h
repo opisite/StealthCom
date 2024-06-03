@@ -1,6 +1,8 @@
 #ifndef PACKET_RX_TX_H
 #define PACKET_RX_TX_H
 
+#include "packet_queue.h"
+
 typedef struct {
     uint8_t it_version;
     uint8_t it_pad;
@@ -22,6 +24,6 @@ extern const uint8_t *this_MAC;
 void packet_capture_wrapper();
 void packet_rx(void *buffer, int buffer_len);
 void packet_tx();
-bool set_sys_info(const char *device);
+bool packet_rx_tx_init(const char *device, std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 
 #endif
