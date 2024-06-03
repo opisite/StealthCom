@@ -1,7 +1,10 @@
-#ifndef PICOM_PKT_HANDLER_H
-#define PICOM_PKT_HANDLER_H
+#ifndef STEALTHCOM_PKT_HANDLER_H
+#define STEALTHCOM_PKT_HANDLER_H
 
 #include <cstdint>
+#include <memory>
+
+#include "packet_queue.h"
 
 typedef struct {
     uint8_t type;
@@ -14,5 +17,6 @@ typedef struct {
 void user_advertise_thread();
 
 void handle_packet(const stealthcom_header_t *pkt);
+void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 
 #endif

@@ -16,25 +16,14 @@
 
 #include "packet_rx_tx.h"
 #include "stealthcom_pkt_handler.h"
-#include "input_handler.h"
+#include "io_handler.h"
 #include "utils.h"
-#include "packet_queue.h"
 
-std::mutex queueMutex;
-std::condition_variable queueCV;
-std::queue<std::unique_ptr<struct packet_wrapper>> destQueue;
+static std::shared_ptr<PacketQueue> rx_queue;
+static std::shared_ptr<PacketQueue> tx_queue;
 
 const uint8_t *this_MAC;
 const char *netif;
-
-static inline bool is_own_mac(const uint8_t *MAC) {
-    for(int x = 0; x < 6; x++) {
-        if(MAC[x] != this_MAC[x]) {
-            return false;
-        }
-    }
-    return true;
-}
 
 static inline bool is_stealthcom_probe(const uint8_t *MAC) {
     for(int x = 0; x < 6; x++) {
@@ -94,10 +83,11 @@ void packet_rx(void *buffer, int buffer_len) {
 
     if(mac_hdr->frame_ctrl[0] == 0x40) {
         if(is_stealthcom_probe(&mac_hdr->addr1[0])) {
-            std::cout << "PROBE RECEIVED" << std::endl;
+            output_push_msg("Probe received");
         }
     }
 }
+
 
 void packet_tx() {
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -109,32 +99,19 @@ void packet_tx() {
         return;
     }
 
-    while(true) {
-        std::unique_ptr<packet_wrapper> packet;
-
-        {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            queueCV.wait(lock, [] { return !destQueue.empty();});
-
-            if (!destQueue.empty()) {
-                packet = std::move(destQueue.front());
-                destQueue.pop();
-            } else {
-                continue;
-            }
-        }
-
-        if (packet && pcap_sendpacket(handle, (const u_char*)packet->buf, packet->buf_len) != 0) {
+    while (true) {
+        auto packet = tx_queue->pop();
+        if (packet && pcap_sendpacket(handle, reinterpret_cast<const u_char*>(packet->buf), packet->buf_len) != 0) {
             std::cerr << "Error sending packet: " << pcap_geterr(handle) << std::endl;
         } else if (packet) {
-            std::cout << "Packet sent successfully!" << std::endl;
+            output_push_msg("Packet sent successfully");
         }
     }
 
     pcap_close(handle);
 }
 
-bool set_sys_info(const char *device) {
+bool packet_rx_tx_init(const char *device, std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     int fd;
     struct ifreq ifr;
 
@@ -159,5 +136,8 @@ bool set_sys_info(const char *device) {
     memcpy((void*)&this_MAC[0], ifr.ifr_hwaddr.sa_data, 6);
     netif = device;
 
-    return true; // TODO: return false if device doesnt exist as a network interface
+    rx_queue = rx;
+    tx_queue = tx;
+
+    return true;
 }
