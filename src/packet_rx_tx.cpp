@@ -18,11 +18,11 @@
 #include "stealthcom_pkt_handler.h"
 #include "io_handler.h"
 #include "utils.h"
+#include "user_data.h"
 
 static std::shared_ptr<PacketQueue> rx_queue;
 static std::shared_ptr<PacketQueue> tx_queue;
 
-const uint8_t *this_MAC;
 const char *netif;
 
 static inline bool is_stealthcom_probe(const uint8_t *MAC) {
@@ -32,6 +32,23 @@ static inline bool is_stealthcom_probe(const uint8_t *MAC) {
         }
     }
     return true;
+}
+
+static const u_char * append_radiotap_header(const char *buf, int buf_len, int *final_packet_size) {
+    static const radiotap_header_t default_radiotap_header = {
+        .it_version = 0,
+        .it_pad = 0,
+        .it_len = sizeof(radiotap_header_t),
+        .it_present = 0
+    };
+
+    *final_packet_size = buf_len + sizeof(radiotap_header_t);
+    u_char* new_buf = new u_char[*final_packet_size];
+
+    memcpy(new_buf, &default_radiotap_header, sizeof(radiotap_header_t));
+    memcpy(new_buf + sizeof(radiotap_header_t), buf, buf_len);
+
+    return new_buf;
 }
 
 void packet_capture_wrapper() {
@@ -100,10 +117,12 @@ void packet_tx() {
     }
 
     while (true) {
-        auto packet = tx_queue->pop();
-        if (packet && pcap_sendpacket(handle, reinterpret_cast<const u_char*>(packet->buf), packet->buf_len) != 0) {
+        auto raw_packet = tx_queue->pop();
+        int final_packet_size;
+        const u_char *final_packet = append_radiotap_header(raw_packet->buf, raw_packet->buf_len, &final_packet_size);
+        if (final_packet && pcap_sendpacket(handle, final_packet, final_packet_size) != 0) {
             std::cerr << "Error sending packet: " << pcap_geterr(handle) << std::endl;
-        } else if (packet) {
+        } else if (final_packet) {
         //    output_push_msg("Packet sent successfully");
         }
     }
@@ -132,8 +151,7 @@ bool packet_rx_tx_init(const char *device, std::shared_ptr<PacketQueue> rx, std:
 
     close(fd);
 
-    this_MAC = (uint8_t *)malloc(6);
-    memcpy((void*)&this_MAC[0], ifr.ifr_hwaddr.sa_data, 6);
+    set_MAC((uint8_t *)ifr.ifr_hwaddr.sa_data);
     netif = device;
 
     rx_queue = rx;

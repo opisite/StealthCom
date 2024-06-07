@@ -1,0 +1,13 @@
+#ifndef USER_DATA_H
+#define USER_DATA_H
+
+#include <string>
+#include "stealthcom_user.h"
+
+void set_MAC(const uint8_t *MAC);
+void set_user_ID(const std::string& user_ID);
+const uint8_t * get_MAC();
+std::string& get_user_ID();
+void print_user_details();
+
+#endif

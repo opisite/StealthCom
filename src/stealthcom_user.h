@@ -5,7 +5,7 @@
 
 class StealthcomUser {
     public:
-        StealthcomUser(const std::string& name, uint8_t *MAC);
+        StealthcomUser(const std::string name, const uint8_t *MAC);
         std::string getName() const;
         void getMAC(uint8_t *MAC) const;
 

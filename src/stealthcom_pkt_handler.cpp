@@ -6,6 +6,7 @@
 #include "packet_rx_tx.h"
 #include "utils.h"
 #include "packet_queue.h"
+#include "user_data.h"
 
 static std::shared_ptr<PacketQueue> rx_queue;
 static std::shared_ptr<PacketQueue> tx_queue;
@@ -17,12 +18,20 @@ void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_pt
     // TODO
 }
 
-void handle_packet(const stealthcom_header_t *pkt) {
+void handle_packet(void *pkt) {
     // TODO
 }
 
 void user_advertise_thread() {
-    static struct __attribute__((packed)) stealthcom_probe_request_t {
+    const uint8_t *this_MAC = get_MAC();
+    std::string this_user_ID = get_user_ID();
+    uint8_t user_ID_len = static_cast<uint8_t>(this_user_ID.length());
+
+    struct stealthcom_probe_extension ext;
+    memcpy(ext.source_MAC, this_MAC, 6);
+    strncpy(ext.user_ID, this_user_ID.c_str(), user_ID_len);
+
+    static struct __attribute__((packed)) stealthcom_probe_request {
         uint8_t frame_ctrl[2];
         uint8_t duration_id[2];
         uint8_t addr1[6];
@@ -31,7 +40,8 @@ void user_advertise_thread() {
         uint8_t seq_ctrl[2];
         uint8_t SSID_params[2];
         uint8_t supported_rate_params[2];
-    } stealthcom_probe_request = {
+        struct stealthcom_probe_extension probe_ext;
+    } probe = {
         .frame_ctrl =               {0x40, 0x00},
         .duration_id =              {0x00, 0x00},
         .addr1 =                    {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA},
@@ -40,15 +50,16 @@ void user_advertise_thread() {
         .seq_ctrl =                 {0x00, 0x00},
         .SSID_params =              {0x00, 0x00},
         .supported_rate_params =    {0x00, 0x00},
+        .probe_ext =                ext,
     };
 
     while(true) {
         auto packet = std::make_unique<packet_wrapper>();
 
-        packet->buf = new char[sizeof(stealthcom_probe_request)];
-        packet->buf_len = sizeof(stealthcom_probe_request);
+        packet->buf = new char[sizeof(probe)];
+        packet->buf_len = sizeof(probe);
 
-        memcpy((void*)(packet->buf), &stealthcom_probe_request, sizeof(stealthcom_probe_request));
+        memcpy((void*)(packet->buf), &probe, sizeof(probe));
 
         tx_queue->push(std::move(packet));
 
