@@ -25,16 +25,10 @@ static std::shared_ptr<PacketQueue> tx_queue;
 
 const char *netif;
 
-static inline bool is_stealthcom_probe(const uint8_t *MAC) {
-    for(int x = 0; x < 6; x++) {
-        if(MAC[x] != 0xAA) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static const u_char * append_radiotap_header(const char *buf, int buf_len, int *final_packet_size) {
+/*
+    Append a radiotap header at the beginning of the packet to be sent by packet_tx thread
+*/
+static const u_char * append_radiotap_header(void *buf, int buf_len, int *final_packet_size) {
     static const radiotap_header_t default_radiotap_header = {
         .it_version = 0,
         .it_pad = 0,
@@ -51,6 +45,9 @@ static const u_char * append_radiotap_header(const char *buf, int buf_len, int *
     return new_buf;
 }
 
+/*
+    Open a raw socket, then send give all received packets to packet_rx
+*/
 void packet_capture_wrapper() {
     int sockfd;
     char buffer[ETH_FRAME_LEN];
@@ -94,18 +91,25 @@ void packet_capture_wrapper() {
     close(sockfd);
 }
 
+/*
+    Handle all packets received via netif
+*/
 void packet_rx(void *buffer, int buffer_len) {
     radiotap_header_t *radiotap_header = (radiotap_header_t *)buffer;
     wifi_mac_hdr_t *mac_hdr = (wifi_mac_hdr_t *)((uint8_t *)buffer + radiotap_header->it_len);
+    int final_packet_size = buffer_len - radiotap_header->it_len;
 
     if(mac_hdr->frame_ctrl[0] == 0x40) {
-        if(is_stealthcom_probe(&mac_hdr->addr1[0])) {
-        //    output_push_msg("Probe received");
-        }
+        auto pkt_wrapper = std::make_unique<packet_wrapper>();
+        pkt_wrapper->buf = mac_hdr;
+        pkt_wrapper->buf_len = final_packet_size;
+        rx_queue->push(std::move(pkt_wrapper));
     }
 }
 
-
+/*
+    Transmit packets in the tx_queue
+*/
 void packet_tx() {
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t *handle;
@@ -130,6 +134,9 @@ void packet_tx() {
     pcap_close(handle);
 }
 
+/*
+    Initialize rx_queue, tx_queue, and retrieve MAC address of the network interface controller from the system
+*/
 bool packet_rx_tx_init(const char *device, std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     int fd;
     struct ifreq ifr;
@@ -141,7 +148,7 @@ bool packet_rx_tx_init(const char *device, std::shared_ptr<PacketQueue> rx, std:
     }
 
     ifr.ifr_addr.sa_family = AF_INET;
-    strncpy(ifr.ifr_name, device, IFNAMSIZ-1);
+    strncpy(ifr.ifr_name, device, IFNAMSIZ - 1);
 
     if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1) {
         perror("ioctl");

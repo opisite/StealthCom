@@ -13,9 +13,20 @@ struct __attribute__((packed)) stealthcom_probe_extension {
     char user_ID[USER_ID_MAX_LEN];
 };
 
-void user_advertise_thread();
+struct __attribute__((packed)) stealthcom_probe_request {
+    uint8_t frame_ctrl[2];
+    uint8_t duration_id[2];
+    uint8_t addr1[6];
+    uint8_t addr2[6];
+    uint8_t addr3[6];
+    uint8_t seq_ctrl[2];
+    uint8_t SSID_params[2];
+    uint8_t supported_rate_params[2];
+    struct stealthcom_probe_extension probe_ext;
+};
 
-void handle_packet(void *pkt);
+void user_advertise_thread();
+void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 
 #endif

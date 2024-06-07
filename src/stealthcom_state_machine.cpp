@@ -1,8 +1,10 @@
 #include <stdexcept>
+#include <thread>
 #include "stealthcom_state_machine.h"
 #include "io_handler.h"
 #include "stealthcom_logic.h"
 #include "user_data.h"
+#include "stealthcom_pkt_handler.h"
 
 static const struct {
     std::string key;
@@ -54,6 +56,8 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
         case ENTER_USER_ID: {
             if(is_valid_user_ID(input)) {
                 set_user_ID(input);
+                std::thread advertiseThread(user_advertise_thread);
+                advertiseThread.detach();
                 set_state(MENU);
             } else {
                 set_state(ENTER_USER_ID);

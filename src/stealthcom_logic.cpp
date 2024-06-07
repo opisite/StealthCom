@@ -14,14 +14,18 @@
 #include "stealthcom_logic.h"
 #include "message_queue.h"
 #include "stealthcom_state_machine.h"
+#include "user_registry.h"
 
 static MessageQueue *input_queue;
 static StealthcomStateMachine *state_machine;
+
+std::shared_ptr<UserRegistry> user_registry;
 
 void stealthcom_init(const char *netif) {
 
     std::shared_ptr<PacketQueue> rx_queue = std::make_shared<PacketQueue>();
     std::shared_ptr<PacketQueue> tx_queue = std::make_shared<PacketQueue>();
+    user_registry = std::make_shared<UserRegistry>();
 
     ncurses_init();
     packet_rx_tx_init(netif, rx_queue, tx_queue);
@@ -30,6 +34,12 @@ void stealthcom_init(const char *netif) {
     std::thread ncursesThread(ncurses_thread);
     std::thread packetTxThread(packet_tx);
     std::thread packetRxThread(packet_capture_wrapper);
+    std::thread packetHandlerThread(packet_handler_thread);
+
+    ncursesThread.detach();
+    packetTxThread.detach();
+    packetRxThread.detach();
+    packetHandlerThread.detach();
 
     input_queue = new MessageQueue();
     state_machine = new StealthcomStateMachine();
@@ -39,8 +49,6 @@ void stealthcom_init(const char *netif) {
 }
 
 void stealthcom_main_thread() {
-    std::thread advertiseThread(user_advertise_thread);
-    
     while(true) {
         std::string msg = input_queue->pop();
 
