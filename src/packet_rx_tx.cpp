@@ -83,7 +83,7 @@ void packet_rx(void *buffer, int buffer_len) {
 
     if(mac_hdr->frame_ctrl[0] == 0x40) {
         if(is_stealthcom_probe(&mac_hdr->addr1[0])) {
-            output_push_msg("Probe received");
+        //    output_push_msg("Probe received");
         }
     }
 }
@@ -104,7 +104,7 @@ void packet_tx() {
         if (packet && pcap_sendpacket(handle, reinterpret_cast<const u_char*>(packet->buf), packet->buf_len) != 0) {
             std::cerr << "Error sending packet: " << pcap_geterr(handle) << std::endl;
         } else if (packet) {
-            output_push_msg("Packet sent successfully");
+        //    output_push_msg("Packet sent successfully");
         }
     }
 

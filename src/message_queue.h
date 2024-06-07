@@ -11,6 +11,7 @@ class MessageQueue {
 public:
     void push(std::string msg);
     std::string pop();
+    bool empty();
 
 private:
     std::queue<std::string> queue;

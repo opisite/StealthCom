@@ -22,19 +22,18 @@ void stealthcom_init(const char *netif) {
 
     std::shared_ptr<PacketQueue> rx_queue = std::make_shared<PacketQueue>();
     std::shared_ptr<PacketQueue> tx_queue = std::make_shared<PacketQueue>();
-    
-    input_queue = new MessageQueue();
-    state_machine = new StealthcomStateMachine();
 
-    io_init();
+    ncurses_init();
     packet_rx_tx_init(netif, rx_queue, tx_queue);
     stealthcom_pkt_handler_init(rx_queue, tx_queue);
 
-    std::thread inputThread(input_thread);
-    std::thread outputThread(output_thread);
+    std::thread ncursesThread(ncurses_thread);
     std::thread packetTxThread(packet_tx);
     std::thread packetRxThread(packet_capture_wrapper);
     std::thread advertiseThread(user_advertise_thread);
+
+    input_queue = new MessageQueue();
+    state_machine = new StealthcomStateMachine();
 
     stealthcom_main_thread();
 }

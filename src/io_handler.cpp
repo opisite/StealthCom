@@ -5,9 +5,11 @@
 #include <streambuf>
 #include <string>
 #include <mutex>
+#include <thread>
 
 #include "message_queue.h"
 #include "stealthcom_logic.h"
+#include "io_handler.h"
 
 #define INPUT_BUFFER_SIZE 256
 
@@ -17,7 +19,9 @@ static WINDOW *input_win;
 static WINDOW *message_win;
 static char *input;
 
-void io_init() {
+static std::mutex mtx;
+
+void ncurses_init() {
     initscr();
     cbreak();
     keypad(stdscr, TRUE);
@@ -34,58 +38,68 @@ void io_init() {
     input = new char[INPUT_BUFFER_SIZE];
     memset(input, 0, INPUT_BUFFER_SIZE);
 
+    nodelay(input_win, TRUE);
+
     output_queue = new MessageQueue();
 }
 
 void io_clr_output() {
+    std::lock_guard<std::mutex> lock(mtx);
     wclear(message_win);
+    wrefresh(message_win);
 }
 
-void output_push_msg(const std::string message) {
+void output_push_msg(const std::string& message) {
     output_queue->push(message);
 }
 
-void output_thread() {
-    while (true) {
-        std::string msg = output_queue->pop();
-        wprintw(message_win, "%s\n", msg.c_str());
-        wrefresh(message_win);
-    }
-}
-
-void input_thread() {
+void ncurses_thread() {
     std::stringstream buffer;
     std::streambuf* old = std::cerr.rdbuf(buffer.rdbuf());
 
     int input_index = 0;
+    int c;
 
     while (true) {
-        wclear(input_win);
-        mvwprintw(input_win, 0, 0, "> %s", input);
-        wrefresh(input_win);
-        int c = wgetch(input_win);
-
-        if ((c == KEY_BACKSPACE || c == 127 || c == 8) && input_index > 0) {
-            input[--input_index] = '\0';
-        } else if (c == '\n') {
-            input[input_index] = '\0';
-            if (std::strcmp(input, "exit") == 0) {
-                break;
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            c = wgetch(input_win);
+        }
+        if (c != ERR) {
+            if ((c == KEY_BACKSPACE || c == 127 || c == 8) && input_index > 0) {
+                input[--input_index] = '\0';
+            } else if (c == '\n') {
+                input[input_index] = '\0';
+                if (std::strcmp(input, "exit") == 0) {
+                    break;
+                }
+                
+                input_push_msg(input);
+                input_index = 0;
+                memset(input, 0, INPUT_BUFFER_SIZE);
+            } else if (c >= 32 && c < 127 && input_index < INPUT_BUFFER_SIZE - 1) {
+                input[input_index++] = c;
+                input[input_index] = '\0';
             }
-            
-            input_push_msg(input);
-            input_index = 0;
-            memset(input, 0, INPUT_BUFFER_SIZE);
-        } else if (c >= 32 && c < 127 && input_index < INPUT_BUFFER_SIZE - 1) {
-            input[input_index++] = c;
-            input[input_index] = '\0';
+
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                wclear(input_win);
+                mvwprintw(input_win, 0, 0, "> %s", input);
+                wrefresh(input_win);
+            }
         }
 
-        wclear(input_win);
-        mvwprintw(input_win, 0, 0, "> %s", input);
-        wrefresh(input_win);
+        while (!output_queue->empty()) {
+            std::string msg = output_queue->pop();
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                wprintw(message_win, "%s\n", msg.c_str());
+                wrefresh(message_win);
+            }
+        }
 
-        std::string error_message;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     std::cerr.rdbuf(old);

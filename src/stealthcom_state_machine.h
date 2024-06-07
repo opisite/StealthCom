@@ -5,7 +5,11 @@
 
 enum State {
     ENTER_USER_ID,
-    CHAT
+    MENU,
+    SHOW_USERS,
+    SETTINGS,
+    DETAILS,
+    CHAT,
 };
 
 class StealthcomStateMachine {
@@ -15,6 +19,8 @@ class StealthcomStateMachine {
         
 
     private:
+        void set_state(State state);
+        void print_state_msg(State state);
         State state;
 };
 
