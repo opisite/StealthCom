@@ -3,10 +3,9 @@
 
 #include <string>
 
-void io_init();
+void ncurses_init();
 void io_clr_output();
-void output_push_msg(const std::string message);
-void output_thread();
-void input_thread();
+void output_push_msg(const std::string& message);
+void ncurses_thread();
 
 #endif

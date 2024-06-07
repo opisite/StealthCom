@@ -15,3 +15,8 @@ std::string MessageQueue::pop() {
     queue.pop();
     return msg;
 }
+
+bool MessageQueue::empty() {
+    std::unique_lock<std::mutex> lock(mtx);
+    return queue.empty();
+}
