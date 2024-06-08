@@ -6,6 +6,7 @@
 #include <string>
 #include <thread>
 #include <memory>
+#include <vector>
 
 #include "stealthcom_user.h"
 
@@ -30,6 +31,7 @@ public:
 
     void add_or_update_entry(const uint8_t *MAC, std::string user_ID);
     void check_and_remove_expired();
+    std::vector<StealthcomUser*> get_users();
 };
 
 extern std::shared_ptr<UserRegistry> user_registry;

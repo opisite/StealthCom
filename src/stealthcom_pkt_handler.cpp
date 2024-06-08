@@ -15,43 +15,28 @@
 static std::shared_ptr<PacketQueue> rx_queue;
 static std::shared_ptr<PacketQueue> tx_queue;
 
-static inline bool is_stealthcom_probe(const uint8_t *MAC) {
-    for(int x = 0; x < 6; x++) {
-        if(MAC[x] != 0xAA) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static void handle_stealthcom_probe(void *buf) {
-    struct stealthcom_probe_request *probe = (stealthcom_probe_request *)buf;
-    struct stealthcom_probe_extension *probe_ext = &probe->probe_ext;
-
+static void handle_stealthcom_probe(struct stealthcom_header *hdr) {
     char user_ID_buf[USER_ID_MAX_LEN + 1];
-    memcpy(user_ID_buf, &probe_ext->user_ID, probe_ext->user_ID_len);
-    user_ID_buf[probe_ext->user_ID_len] = '\0';
+    memcpy(user_ID_buf, &hdr->ext.user_ID, hdr->ext.user_ID_len);
+    user_ID_buf[hdr->ext.user_ID_len] = '\0';
+    std::string user_ID_str(user_ID_buf);
 
-    user_registry->add_or_update_entry(&probe_ext->source_MAC[0], user_ID_buf);
+    user_registry->add_or_update_entry(&hdr->ext.source_MAC[0], user_ID_buf);
 }
 
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     rx_queue = rx;
     tx_queue = tx;
-
-    // TODO
 }
 
 void packet_handler_thread() {
     while(true) {
         std::unique_ptr<packet_wrapper> pkt_wrapper = rx_queue->pop();
         int packet_len = pkt_wrapper->buf_len;
-        wifi_mac_hdr_t *mac_hdr = (wifi_mac_hdr_t *)pkt_wrapper->buf;
+        stealthcom_header *hdr = (stealthcom_header *)pkt_wrapper->buf;
         
-        if(mac_hdr->frame_ctrl[0] == 0x40) { // Probe request
-            if(is_stealthcom_probe(&mac_hdr->addr1[0])) {
-                handle_stealthcom_probe(mac_hdr);
-            }
+        if(hdr->ext.type == PROBE) {
+            handle_stealthcom_probe(hdr);
         }
     }
 }
@@ -61,7 +46,8 @@ void user_advertise_thread() {
     std::string this_user_ID = get_user_ID();
     int user_ID_len = this_user_ID.length();
 
-    struct stealthcom_probe_extension ext;
+    struct stealthcom_L2_extension ext;
+    ext.type = PROBE;
     memcpy(ext.source_MAC, this_MAC, 6);
     strncpy(ext.user_ID, this_user_ID.c_str(), user_ID_len);
     ext.user_ID_len = user_ID_len;
@@ -75,7 +61,7 @@ void user_advertise_thread() {
         uint8_t seq_ctrl[2];
         uint8_t SSID_params[2];
         uint8_t supported_rate_params[2];
-        struct stealthcom_probe_extension probe_ext;
+        struct stealthcom_L2_extension probe_ext;
     } probe = {
         .frame_ctrl =               {0x40, 0x00},
         .duration_id =              {0x00, 0x00},
@@ -98,6 +84,6 @@ void user_advertise_thread() {
 
         tx_queue->push(std::move(packet));
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 }

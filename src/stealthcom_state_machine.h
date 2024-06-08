@@ -22,7 +22,6 @@ class StealthcomStateMachine {
         void set_state(State state);
         void print_state_msg(State state);
         int get_menu_item(const std::string& input);
-        void print_menu_items();
         State state;
 };
 

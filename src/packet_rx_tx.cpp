@@ -25,6 +25,15 @@ static std::shared_ptr<PacketQueue> tx_queue;
 
 const char *netif;
 
+static inline bool is_stealthcom_packet(const uint8_t *MAC) {
+    for(int x = 0; x < 6; x++) {
+        if(MAC[x] != 0xAA) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /*
     Append a radiotap header at the beginning of the packet to be sent by packet_tx thread
 */
@@ -97,14 +106,21 @@ void packet_capture_wrapper() {
 void packet_rx(void *buffer, int buffer_len) {
     radiotap_header_t *radiotap_header = (radiotap_header_t *)buffer;
     wifi_mac_hdr_t *mac_hdr = (wifi_mac_hdr_t *)((uint8_t *)buffer + radiotap_header->it_len);
+
+    if(!is_stealthcom_packet(&mac_hdr->addr1[0])) {
+        return;
+    }
+
     int final_packet_size = buffer_len - radiotap_header->it_len;
 
-    if(mac_hdr->frame_ctrl[0] == 0x40) {
-        auto pkt_wrapper = std::make_unique<packet_wrapper>();
-        pkt_wrapper->buf = mac_hdr;
-        pkt_wrapper->buf_len = final_packet_size;
-        rx_queue->push(std::move(pkt_wrapper));
-    }
+    auto pkt_wrapper = std::make_unique<packet_wrapper>();
+    pkt_wrapper->buf = new uint8_t[final_packet_size];
+    pkt_wrapper->buf_len = final_packet_size;
+
+    memcpy(pkt_wrapper->buf, mac_hdr, final_packet_size);
+
+    rx_queue->push(std::move(pkt_wrapper));
+    
 }
 
 /*
@@ -124,10 +140,9 @@ void packet_tx() {
         auto raw_packet = tx_queue->pop();
         int final_packet_size;
         const u_char *final_packet = append_radiotap_header(raw_packet->buf, raw_packet->buf_len, &final_packet_size);
+
         if (final_packet && pcap_sendpacket(handle, final_packet, final_packet_size) != 0) {
             std::cerr << "Error sending packet: " << pcap_geterr(handle) << std::endl;
-        } else if (final_packet) {
-        //    output_push_msg("Packet sent successfully");
         }
     }
 

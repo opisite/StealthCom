@@ -7,13 +7,18 @@
 #include "packet_queue.h"
 #include "stealthcom_logic.h"
 
-struct __attribute__((packed)) stealthcom_probe_extension {
+typedef enum {
+    PROBE = 0,
+} stealthcom_pkt_type;
+
+struct __attribute__((packed)) stealthcom_L2_extension {
+    stealthcom_pkt_type type;
     uint8_t source_MAC[6];
     uint8_t user_ID_len;
     char user_ID[USER_ID_MAX_LEN];
 };
 
-struct __attribute__((packed)) stealthcom_probe_request {
+struct __attribute__((packed)) stealthcom_header {
     uint8_t frame_ctrl[2];
     uint8_t duration_id[2];
     uint8_t addr1[6];
@@ -22,7 +27,7 @@ struct __attribute__((packed)) stealthcom_probe_request {
     uint8_t seq_ctrl[2];
     uint8_t SSID_params[2];
     uint8_t supported_rate_params[2];
-    struct stealthcom_probe_extension probe_ext;
+    struct stealthcom_L2_extension ext;
 };
 
 void user_advertise_thread();
