@@ -21,8 +21,3 @@ const uint8_t * get_MAC() {
 std::string& get_user_ID() {
     return this_user_ID;
 }
-
-void print_user_details() {
-    output_push_msg("User ID: " + this_user_ID);
-    output_push_msg("User MAC: " + mac_addr_to_str(this_MAC));
-}

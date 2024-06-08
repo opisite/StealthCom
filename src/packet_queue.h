@@ -7,7 +7,7 @@
 #include <memory>
 
 struct packet_wrapper {
-    const char *buf;
+    void *buf;
     int buf_len;
 };
 
