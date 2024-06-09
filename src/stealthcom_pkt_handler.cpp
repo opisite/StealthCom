@@ -27,6 +27,15 @@ static void handle_stealthcom_probe(struct stealthcom_header *hdr) {
     user_registry->add_or_update_entry(&hdr->ext.source_MAC[0], user_ID_buf);
 }
 
+static void handle_stealthcom_conn_request(struct stealthcom_header *hdr) {
+    char user_ID_buf[USER_ID_MAX_LEN + 1];
+    memcpy(user_ID_buf, &hdr->ext.user_ID, hdr->ext.user_ID_len);
+    user_ID_buf[hdr->ext.user_ID_len] = '\0';
+    std::string user_ID_str(user_ID_buf);
+
+    user_registry->add_or_update_entry(&hdr->ext.source_MAC[0], user_ID_buf);
+}
+
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     rx_queue = rx;
     tx_queue = tx;
@@ -40,10 +49,23 @@ void packet_handler_thread() {
         int packet_len = pkt_wrapper->buf_len;
         stealthcom_header *hdr = (stealthcom_header *)pkt_wrapper->buf;
         
-        if(hdr->ext.type == stealthcom_pkt_type::PROBE) {
-            handle_stealthcom_probe(hdr);
+        stealthcom_pkt_type type = hdr->ext.type;
+
+        switch(type) {
+            case stealthcom_pkt_type::PROBE: {
+                handle_stealthcom_probe(hdr);
+                break;
+            }
+            case stealthcom_pkt_type::CONNECT_REQUEST: {
+                handle_stealthcom_conn_request(hdr);
+                break;
+            }
         }
     }
+}
+
+void send_conn_request(StealthcomUser *user) {
+    system_push_msg("Sending connection request to user [" + user->getName() + "] with address [" + mac_addr_to_str(user->getMAC().data()) + "]");
 }
 
 void set_advertise(int set) {

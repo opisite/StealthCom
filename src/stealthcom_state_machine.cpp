@@ -18,6 +18,7 @@
 
 std::atomic<bool> stop_flag;
 std::mutex running_mtx;
+std::mutex user_list_mtx;
 
 typedef void (*SettingFunction)(int);
 
@@ -78,21 +79,21 @@ static int get_value(const std::string& input) {
 }
 
 static void print_menu_items() {
-    output_push_msg("MENU\n");
+    main_push_msg("MENU\n");
     for(int x = 0; x < menu_items_size; x++) {
-        output_push_msg(std::to_string(x + 1) + ": " + menu_items[x].key);
+        main_push_msg(std::to_string(x + 1) + ": " + menu_items[x].key);
     }
 }
 
 static void print_user_details() {
-    output_push_msg("User ID: " + get_user_ID());
-    output_push_msg("User MAC: " + mac_addr_to_str(get_MAC()));
+    main_push_msg("User ID: " + get_user_ID());
+    main_push_msg("User MAC: " + mac_addr_to_str(get_MAC()));
 }
 
 static void print_settings() {
-    output_push_msg("SETTINGS (Exit to apply)\n");
+    main_push_msg("SETTINGS (Exit to apply)\n");
     for(int x = 0; x < settings_items_size; x++) {
-        output_push_msg(std::to_string(x + 1) + ": " + settings_items[x].key + " = " + std::to_string(settings_items[x].temp_value));
+        main_push_msg(std::to_string(x + 1) + ": " + settings_items[x].key + " = " + std::to_string(settings_items[x].temp_value));
     }
 }
 
@@ -102,10 +103,10 @@ static void show_users_thread() {
         users = user_registry->get_users();
         io_clr_output();
         for(int x = 0; x < users.size(); x++) {
-            output_push_msg(std::to_string(x + 1));
-            output_push_msg("MAC Address: " + mac_addr_to_str(users[x]->getMAC().data()));
-            output_push_msg("User ID: " + users[x]->getName());
-            output_push_msg("\n");
+            main_push_msg(std::to_string(x + 1));
+            main_push_msg("MAC Address: " + mac_addr_to_str(users[x]->getMAC().data()));
+            main_push_msg("User ID: " + users[x]->getName());
+            main_push_msg("\n");
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
@@ -152,7 +153,7 @@ void StealthcomStateMachine::perform_state_action(State state) {
     io_clr_output();
     switch (state) {
         case ENTER_USER_ID: {
-            output_push_msg("Enter your user ID (" + std::to_string(USER_ID_MAX_LEN) + " CHARACTERS MAX)");
+            main_push_msg("Enter your user ID (" + std::to_string(USER_ID_MAX_LEN) + " CHARACTERS MAX)");
             break;
         }
         case MENU: {
@@ -180,12 +181,12 @@ void StealthcomStateMachine::perform_substate_action(State state) {
         case SHOW_USERS: {
             stop_flag.store(true);
             io_clr_output();
-            output_push_msg("Send connection request to [" + users[context.selected_index]->getName() + "]? (Y/N)");
+            main_push_msg("Send connection request to [" + users[context.selected_index]->getName() + "]? (Y/N)");
             break;
         }
         case SETTINGS: {
             io_clr_output();
-            output_push_msg("Set: " + settings_items[context.selected_index].key);
+            main_push_msg("Set: " + settings_items[context.selected_index].key);
             break;
         }
     }
@@ -229,10 +230,9 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
                     perform_substate_action(SHOW_USERS);
                 }
             } else if(context.interaction_type == ENTER_VAL) {
-                int index  = context.selected_index;
                 int value = get_value(input);
                 if(value == Y) {
-                    // TODO: Send a connection request
+                    send_conn_request(users[context.selected_index]);
                     set_state(SHOW_USERS);
                 } else if(value == N) {
                     set_state(SHOW_USERS);

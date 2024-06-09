@@ -37,5 +37,6 @@ void user_advertise_thread();
 void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 void set_advertise(int set);
+void send_conn_request(StealthcomUser *user);
 
 #endif
