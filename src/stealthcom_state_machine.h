@@ -12,6 +12,16 @@ enum State {
     CHAT,
 };
 
+enum InteractionType {
+    ENTER_INDEX,
+    ENTER_VAL,
+};
+
+struct SubStateContext {
+    InteractionType interaction_type;
+    int selected_index;
+};
+
 class StealthcomStateMachine {
     public:
         StealthcomStateMachine();
@@ -20,9 +30,11 @@ class StealthcomStateMachine {
 
     private:
         void set_state(State state);
-        void print_state_msg(State state);
-        int get_menu_item(const std::string& input);
+        void perform_state_action(State state);
+        void perform_substate_action(State state);
+        void reset_context();
         State state;
+        SubStateContext context;
 };
 
 #endif

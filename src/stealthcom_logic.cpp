@@ -32,13 +32,15 @@ void stealthcom_init(const char *netif) {
     stealthcom_pkt_handler_init(rx_queue, tx_queue);
 
     std::thread ncursesThread(ncurses_thread);
-    std::thread packetTxThread(packet_tx);
-    std::thread packetRxThread(packet_capture_wrapper);
-    std::thread packetHandlerThread(packet_handler_thread);
-
     ncursesThread.detach();
+
+    std::thread packetTxThread(packet_tx);
     packetTxThread.detach();
+
+    std::thread packetRxThread(packet_capture_wrapper);
     packetRxThread.detach();
+
+    std::thread packetHandlerThread(packet_handler_thread);
     packetHandlerThread.detach();
 
     input_queue = new MessageQueue();
@@ -59,11 +61,4 @@ void stealthcom_main_thread() {
 
 void input_push_msg(const std::string message) {
     input_queue->push(message);
-}
-
-bool is_valid_user_ID(const std::string user_ID) {
-    if(user_ID.length() > USER_ID_MAX_LEN) {
-        return false;
-    }
-    return true;
 }

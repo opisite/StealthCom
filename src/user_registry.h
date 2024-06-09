@@ -15,15 +15,16 @@ private:
     struct RegistryEntry {
         StealthcomUser *user;
         int ttl;
+        bool connected;
     };
 
     std::unordered_map<std::string, RegistryEntry> registry;
     std::mutex registryMutex;
     bool running;
     bool alert;
-    std::thread worker;
-
-    void registry_manager();
+    std::thread registryManagerThread;
+    
+    void registry_manager_thread();
 
 public:
     UserRegistry();

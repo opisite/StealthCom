@@ -7,14 +7,19 @@
 
 #include "stealthcom_state_machine.h"
 #include "io_handler.h"
-#include "stealthcom_logic.h"
 #include "user_data.h"
 #include "stealthcom_pkt_handler.h"
 #include "user_registry.h"
 #include "utils.h"
 
+#define Y 1
+#define N 0
+#define INVALID -1
+
 std::atomic<bool> stop_flag;
 std::mutex running_mtx;
+
+typedef void (*SettingFunction)(int);
 
 static const struct {
     std::string key;
@@ -25,10 +30,55 @@ static const struct {
     { "Details", DETAILS },
 };
 
+struct {
+    const std::string key;
+    int value;
+    int temp_value;
+    const std::pair<int, int> range; // Inclusive
+    const SettingFunction func;
+} settings_items[] = {
+    { "Advertise", 0, 0, {0, 1}, &set_advertise },
+};
+
 static const int menu_items_size = sizeof(menu_items) / sizeof(menu_items[0]);
+static const int settings_items_size = sizeof(settings_items) / sizeof(settings_items[0]);
+
+std::vector<StealthcomUser*> users;
+
+static int get_item(const std::string& input, int size) {
+    int index;
+    try {
+        index = std::stoi(input);
+        return (index < 1 || index > size) ? INVALID : index - 1;
+    } catch (const std::invalid_argument&) {
+        return INVALID;
+    } catch (const std::out_of_range&) {
+        return INVALID;
+    }
+}
+
+static int get_value(const std::string& input, const std::pair<int, int> range) {
+    int value;
+    try {
+        value = std::stoi(input);
+        return (value >= range.first && value <= range.second) ? value : INVALID;
+    } catch (const std::invalid_argument&) {
+        return INVALID;
+    } catch (const std::out_of_range&) {
+        return INVALID;
+    }
+}
+
+static int get_value(const std::string& input) {
+    if(input == "Y" || input == "y")
+        return Y;
+    if(input == "N" || input == "n")
+        return N;
+    return INVALID;
+}
 
 static void print_menu_items() {
-    output_push_msg("MENU");
+    output_push_msg("MENU\n");
     for(int x = 0; x < menu_items_size; x++) {
         output_push_msg(std::to_string(x + 1) + ": " + menu_items[x].key);
     }
@@ -39,13 +89,17 @@ static void print_user_details() {
     output_push_msg("User MAC: " + mac_addr_to_str(get_MAC()));
 }
 
-static void print_users_thread() {
-    stop_flag.store(true);
-    std::lock_guard<std::mutex> lock(running_mtx);
-    stop_flag.store(false);
+static void print_settings() {
+    output_push_msg("SETTINGS (Exit to apply)\n");
+    for(int x = 0; x < settings_items_size; x++) {
+        output_push_msg(std::to_string(x + 1) + ": " + settings_items[x].key + " = " + std::to_string(settings_items[x].temp_value));
+    }
+}
 
+static void show_users_thread() {
+    std::lock_guard<std::mutex> lock(running_mtx);
     while(!stop_flag.load()) {
-        std::vector<StealthcomUser*> users = user_registry->get_users();
+        users = user_registry->get_users();
         io_clr_output();
         for(int x = 0; x < users.size(); x++) {
             output_push_msg(std::to_string(x + 1));
@@ -53,21 +107,48 @@ static void print_users_thread() {
             output_push_msg("User ID: " + users[x]->getName());
             output_push_msg("\n");
         }
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    stop_flag.store(false);
+}
+
+static void apply_settings() {
+    for(int x = 0; x < settings_items_size; x++) {
+        if(settings_items[x].value != settings_items[x].temp_value) {
+            settings_items[x].value = settings_items[x].temp_value;
+            settings_items[x].func(settings_items[x].value);
+        }
     }
 }
 
+static inline bool is_valid_user_ID(const std::string user_ID) {
+    if(user_ID.length() > USER_ID_MAX_LEN) {
+        return false;
+    }
+    return true;
+}
+
 StealthcomStateMachine::StealthcomStateMachine() {
+    context = {
+        ENTER_INDEX,
+        INVALID,
+    };
     stop_flag.store(false);
     set_state(ENTER_USER_ID);
 }
 
-void StealthcomStateMachine::set_state(State state) {
-    this->state = state;
-    print_state_msg(state);
+inline void StealthcomStateMachine::reset_context() {
+    context.interaction_type = ENTER_INDEX;
+    context.selected_index = INVALID;
 }
 
-void StealthcomStateMachine::print_state_msg(State state) {
+void StealthcomStateMachine::set_state(State state) {
+    this->state = state;
+    reset_context();
+    perform_state_action(state);
+}
+
+void StealthcomStateMachine::perform_state_action(State state) {
     io_clr_output();
     switch (state) {
         case ENTER_USER_ID: {
@@ -83,8 +164,28 @@ void StealthcomStateMachine::print_state_msg(State state) {
             break;
         }
         case SHOW_USERS: {
-            std::thread showUsersThread(print_users_thread);
+            std::thread showUsersThread(show_users_thread);
             showUsersThread.detach();
+            break;
+        }
+        case SETTINGS: {
+            print_settings();
+            break;
+        }
+    }
+}
+
+void StealthcomStateMachine::perform_substate_action(State state) {
+    switch (state) {
+        case SHOW_USERS: {
+            stop_flag.store(true);
+            io_clr_output();
+            output_push_msg("Send connection request to [" + users[context.selected_index]->getName() + "]? (Y/N)");
+            break;
+        }
+        case SETTINGS: {
+            io_clr_output();
+            output_push_msg("Set: " + settings_items[context.selected_index].key);
             break;
         }
     }
@@ -95,8 +196,6 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
         case ENTER_USER_ID: {
             if(is_valid_user_ID(input)) {
                 set_user_ID(input);
-                std::thread advertiseThread(user_advertise_thread);
-                advertiseThread.detach();
                 set_state(MENU);
             } else {
                 set_state(ENTER_USER_ID);
@@ -104,9 +203,9 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
             break;
         }
         case MENU: {
-            int index = get_menu_item(input);
-            if(index != -1) {
-                set_state(menu_items[index - 1].state);
+            int index = get_item(input, menu_items_size);
+            if(index != INVALID) {
+                set_state(menu_items[index].state);
             }
             break;
         }
@@ -121,11 +220,47 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
                 stop_flag.store(true);
                 set_state(MENU);
             }
+
+            if(context.interaction_type == ENTER_INDEX) {
+                int index = get_item(input, users.size());
+                if(index != INVALID) {
+                    context.selected_index = index;
+                    context.interaction_type = ENTER_VAL;
+                    perform_substate_action(SHOW_USERS);
+                }
+            } else if(context.interaction_type == ENTER_VAL) {
+                int index  = context.selected_index;
+                int value = get_value(input);
+                if(value == Y) {
+                    // TODO: Send a connection request
+                    set_state(SHOW_USERS);
+                } else if(value == N) {
+                    set_state(SHOW_USERS);
+                }
+            }
             break;
         }
         case SETTINGS: {
             if(input == "..") {
+                apply_settings();
                 set_state(MENU);
+                break;
+            }
+
+            if(context.interaction_type == ENTER_INDEX) {
+                int index = get_item(input, settings_items_size);
+                if(index != INVALID) {
+                    context.selected_index = index;
+                    context.interaction_type = ENTER_VAL;
+                    perform_substate_action(SETTINGS);
+                }
+            } else if(context.interaction_type == ENTER_VAL) {
+                int index  = context.selected_index;
+                int value = get_value(input, settings_items[index].range);
+                if(value != INVALID) {
+                    settings_items[context.selected_index].temp_value = std::stoi(input);
+                    set_state(SETTINGS);
+                }
             }
             break;
         }
@@ -135,17 +270,5 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
             }
             break;
         }
-    }
-}
-
-int StealthcomStateMachine::get_menu_item(const std::string& input) {
-    int index;
-    try {
-        index = std::stoi(input);
-        return (index < 1 || index > menu_items_size) ? -1 : index;
-    } catch (const std::invalid_argument&) {
-        return -1;
-    } catch (const std::out_of_range&) {
-        return -1;
     }
 }

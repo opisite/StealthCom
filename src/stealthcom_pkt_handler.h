@@ -7,15 +7,18 @@
 #include "packet_queue.h"
 #include "stealthcom_logic.h"
 
-typedef enum {
+enum class stealthcom_pkt_type : uint8_t {
     PROBE = 0,
-} stealthcom_pkt_type;
+    CONNECT_REQUEST,
+    KEY_EXCHANGE,
+};
 
 struct __attribute__((packed)) stealthcom_L2_extension {
     stealthcom_pkt_type type;
     uint8_t source_MAC[6];
     uint8_t user_ID_len;
     char user_ID[USER_ID_MAX_LEN];
+    uint8_t payload; // Variable length of data
 };
 
 struct __attribute__((packed)) stealthcom_header {
@@ -33,5 +36,6 @@ struct __attribute__((packed)) stealthcom_header {
 void user_advertise_thread();
 void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
+void set_advertise(int set);
 
 #endif

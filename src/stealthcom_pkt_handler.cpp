@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <string>
+#include <atomic>
 
 #include "stealthcom_pkt_handler.h"
 #include "packet_rx_tx.h"
@@ -11,6 +12,8 @@
 #include "user_data.h"
 #include "user_registry.h"
 #include "io_handler.h"
+
+std::atomic<bool> advertise_stop_flag;
 
 static std::shared_ptr<PacketQueue> rx_queue;
 static std::shared_ptr<PacketQueue> tx_queue;
@@ -27,6 +30,8 @@ static void handle_stealthcom_probe(struct stealthcom_header *hdr) {
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     rx_queue = rx;
     tx_queue = tx;
+
+    advertise_stop_flag.store(false);
 }
 
 void packet_handler_thread() {
@@ -35,9 +40,18 @@ void packet_handler_thread() {
         int packet_len = pkt_wrapper->buf_len;
         stealthcom_header *hdr = (stealthcom_header *)pkt_wrapper->buf;
         
-        if(hdr->ext.type == PROBE) {
+        if(hdr->ext.type == stealthcom_pkt_type::PROBE) {
             handle_stealthcom_probe(hdr);
         }
+    }
+}
+
+void set_advertise(int set) {
+    if(set == 0) {
+        advertise_stop_flag.store(true);
+    } else {
+        std::thread advertiseThread(user_advertise_thread);
+        advertiseThread.detach();
     }
 }
 
@@ -47,7 +61,7 @@ void user_advertise_thread() {
     int user_ID_len = this_user_ID.length();
 
     struct stealthcom_L2_extension ext;
-    ext.type = PROBE;
+    ext.type = stealthcom_pkt_type::PROBE;
     memcpy(ext.source_MAC, this_MAC, 6);
     strncpy(ext.user_ID, this_user_ID.c_str(), user_ID_len);
     ext.user_ID_len = user_ID_len;
@@ -74,7 +88,7 @@ void user_advertise_thread() {
         .probe_ext =                ext,
     };
 
-    while(true) {
+    while(!advertise_stop_flag.load()) {
         auto packet = std::make_unique<packet_wrapper>();
 
         packet->buf = new char[sizeof(probe)];
@@ -86,4 +100,5 @@ void user_advertise_thread() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
+    advertise_stop_flag.store(false);
 }
