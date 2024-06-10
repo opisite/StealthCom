@@ -9,8 +9,5 @@
 void stealthcom_init(const char *netif);
 void stealthcom_main_thread();
 void input_push_msg(const std::string message);
-bool is_valid_user_ID(const std::string user_ID);
-StealthcomUser *set_user_data(const std::string user_ID);
-
 
 #endif
