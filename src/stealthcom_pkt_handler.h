@@ -8,7 +8,7 @@
 #include "stealthcom_logic.h"
 
 enum class stealthcom_pkt_type : uint8_t {
-    PROBE = 0,
+    BEACON = 0,
     CONNECT_REQUEST,
     KEY_EXCHANGE,
 };
@@ -16,9 +16,22 @@ enum class stealthcom_pkt_type : uint8_t {
 struct __attribute__((packed)) stealthcom_L2_extension {
     stealthcom_pkt_type type;
     uint8_t source_MAC[6];
+    uint8_t dest_mac[6];
     uint8_t user_ID_len;
     char user_ID[USER_ID_MAX_LEN];
-    uint8_t payload; // Variable length of data
+    uint8_t payload_len;
+    uint8_t payload[1]; // Variable length of data
+
+    static stealthcom_L2_extension * create(uint8_t payload_len) {
+        void* mem = std::malloc(sizeof(stealthcom_L2_extension) + payload_len - 1);
+        if (!mem) {
+            throw std::bad_alloc();
+        }
+        return new (mem) stealthcom_L2_extension(payload_len);
+    }
+
+
+    stealthcom_L2_extension(uint8_t payload_size) : payload_len(payload_len) {}
 };
 
 struct __attribute__((packed)) stealthcom_header {
@@ -30,7 +43,6 @@ struct __attribute__((packed)) stealthcom_header {
     uint8_t seq_ctrl[2];
     uint8_t SSID_params[2];
     uint8_t supported_rate_params[2];
-    struct stealthcom_L2_extension ext;
 };
 
 void user_advertise_thread();

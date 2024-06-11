@@ -107,7 +107,7 @@ void packet_rx(void *buffer, int buffer_len) {
     radiotap_header_t *radiotap_header = (radiotap_header_t *)buffer;
     wifi_mac_hdr_t *mac_hdr = (wifi_mac_hdr_t *)((uint8_t *)buffer + radiotap_header->it_len);
 
-    if(!is_stealthcom_packet(&mac_hdr->addr1[0])) {
+    if(!is_stealthcom_packet(&mac_hdr->addr2[0])) {
         return;
     }
 

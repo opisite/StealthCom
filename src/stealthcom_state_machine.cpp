@@ -130,7 +130,7 @@ static inline bool is_valid_user_ID(const std::string user_ID) {
 }
 
 StealthcomStateMachine::StealthcomStateMachine() {
-    context = {
+    substate_context = {
         ENTER_INDEX,
         INVALID,
     };
@@ -138,14 +138,14 @@ StealthcomStateMachine::StealthcomStateMachine() {
     set_state(ENTER_USER_ID);
 }
 
-inline void StealthcomStateMachine::reset_context() {
-    context.interaction_type = ENTER_INDEX;
-    context.selected_index = INVALID;
+inline void StealthcomStateMachine::reset_substate_context() {
+    substate_context.interaction_type = ENTER_INDEX;
+    substate_context.selected_index = INVALID;
 }
 
 void StealthcomStateMachine::set_state(State state) {
     this->state = state;
-    reset_context();
+    reset_substate_context();
     perform_state_action(state);
 }
 
@@ -181,12 +181,12 @@ void StealthcomStateMachine::perform_substate_action(State state) {
         case SHOW_USERS: {
             stop_flag.store(true);
             io_clr_output();
-            main_push_msg("Send connection request to [" + users[context.selected_index]->getName() + "]? (Y/N)");
+            main_push_msg("Send connection request to [" + users[substate_context.selected_index]->getName() + "]? (Y/N)");
             break;
         }
         case SETTINGS: {
             io_clr_output();
-            main_push_msg("Set: " + settings_items[context.selected_index].key);
+            main_push_msg("Set: " + settings_items[substate_context.selected_index].key);
             break;
         }
     }
@@ -222,17 +222,17 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
                 set_state(MENU);
             }
 
-            if(context.interaction_type == ENTER_INDEX) {
+            if(substate_context.interaction_type == ENTER_INDEX) {
                 int index = get_item(input, users.size());
                 if(index != INVALID) {
-                    context.selected_index = index;
-                    context.interaction_type = ENTER_VAL;
+                    substate_context.selected_index = index;
+                    substate_context.interaction_type = ENTER_VAL;
                     perform_substate_action(SHOW_USERS);
                 }
-            } else if(context.interaction_type == ENTER_VAL) {
+            } else if(substate_context.interaction_type == ENTER_VAL) {
                 int value = get_value(input);
                 if(value == Y) {
-                    send_conn_request(users[context.selected_index]);
+                    send_conn_request(users[substate_context.selected_index]);
                     set_state(SHOW_USERS);
                 } else if(value == N) {
                     set_state(SHOW_USERS);
@@ -247,18 +247,18 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
                 break;
             }
 
-            if(context.interaction_type == ENTER_INDEX) {
+            if(substate_context.interaction_type == ENTER_INDEX) {
                 int index = get_item(input, settings_items_size);
                 if(index != INVALID) {
-                    context.selected_index = index;
-                    context.interaction_type = ENTER_VAL;
+                    substate_context.selected_index = index;
+                    substate_context.interaction_type = ENTER_VAL;
                     perform_substate_action(SETTINGS);
                 }
-            } else if(context.interaction_type == ENTER_VAL) {
-                int index  = context.selected_index;
+            } else if(substate_context.interaction_type == ENTER_VAL) {
+                int index  = substate_context.selected_index;
                 int value = get_value(input, settings_items[index].range);
                 if(value != INVALID) {
-                    settings_items[context.selected_index].temp_value = std::stoi(input);
+                    settings_items[substate_context.selected_index].temp_value = std::stoi(input);
                     set_state(SETTINGS);
                 }
             }
@@ -271,4 +271,8 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
             break;
         }
     }
+}
+
+ConnectionContext StealthcomStateMachine::get_connection_context() {
+    return connection_context;
 }
