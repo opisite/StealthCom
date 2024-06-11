@@ -37,11 +37,12 @@ static void send_packet(stealthcom_L2_extension * ext) {
     memcpy(hdr, &hdr_template, sizeof(stealthcom_header));
     memcpy((uint8_t*)hdr + sizeof(stealthcom_header), ext, ext_len);
 
-    auto packet = std::make_unique<packet_wrapper>();
+    std::unique_ptr<packet_wrapper> packet = std::make_unique<packet_wrapper>();
 
     packet->buf = hdr;
     packet->buf_len = sizeof(stealthcom_header) + sizeof(stealthcom_L2_extension) + ext->payload_len;
 
+   // system_push_msg("IN SEND_PACKET");
     tx_queue->push(std::move(packet));
 }
 
@@ -110,7 +111,6 @@ void packet_handler_thread() {
         
         stealthcom_pkt_type type = ext->type;
 
-        //system_push_msg("PACKET_RECEIVED");
         switch(type) {
             case stealthcom_pkt_type::BEACON: {
                 handle_stealthcom_beacon(ext);
@@ -147,6 +147,7 @@ void user_advertise_thread() {
 
     while(!advertise_stop_flag.load()) {
         send_packet(ext);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     advertise_stop_flag.store(false);

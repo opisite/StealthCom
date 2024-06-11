@@ -22,12 +22,12 @@ static StealthcomStateMachine *state_machine;
 std::shared_ptr<UserRegistry> user_registry;
 
 void stealthcom_init(const char *netif) {
+    ncurses_init();
 
     std::shared_ptr<PacketQueue> rx_queue = std::make_shared<PacketQueue>();
     std::shared_ptr<PacketQueue> tx_queue = std::make_shared<PacketQueue>();
     user_registry = std::make_shared<UserRegistry>();
 
-    ncurses_init();
     packet_rx_tx_init(netif, rx_queue, tx_queue);
     stealthcom_pkt_handler_init(rx_queue, tx_queue);
 

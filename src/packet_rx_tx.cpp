@@ -25,9 +25,9 @@ static std::shared_ptr<PacketQueue> tx_queue;
 
 const char *netif;
 
-static inline bool is_stealthcom_packet(const uint8_t *MAC) {
+static inline bool is_stealthcom_packet(const wifi_mac_hdr_t *hdr) {
     for(int x = 0; x < 6; x++) {
-        if(MAC[x] != 0xAA) {
+        if(hdr->addr2[x] != 0xAA) {
             return false;
         }
     }
@@ -107,7 +107,7 @@ void packet_rx(void *buffer, int buffer_len) {
     radiotap_header_t *radiotap_header = (radiotap_header_t *)buffer;
     wifi_mac_hdr_t *mac_hdr = (wifi_mac_hdr_t *)((uint8_t *)buffer + radiotap_header->it_len);
 
-    if(!is_stealthcom_packet(&mac_hdr->addr2[0])) {
+    if(!is_stealthcom_packet(mac_hdr)) {
         return;
     }
 
@@ -119,6 +119,7 @@ void packet_rx(void *buffer, int buffer_len) {
 
     memcpy(pkt_wrapper->buf, mac_hdr, final_packet_size);
 
+   // system_push_msg("IN PACKET_RX");
     rx_queue->push(std::move(pkt_wrapper));
     
 }
@@ -144,6 +145,7 @@ void packet_tx() {
         if (final_packet && pcap_sendpacket(handle, final_packet, final_packet_size) != 0) {
             std::cerr << "Error sending packet: " << pcap_geterr(handle) << std::endl;
         }
+       // system_push_msg("Sent packet");
     }
 
     pcap_close(handle);
