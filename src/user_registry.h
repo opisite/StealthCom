@@ -23,8 +23,6 @@ private:
     std::unordered_map<std::string, UserRegistryEntry*> registry;
 
 protected:
-    int get_initial_ttl() override;
-    bool should_erase_item(UserRegistryEntry* item) override;
     void decrement_ttl_and_remove_expired() override;
 
 public:
@@ -33,6 +31,7 @@ public:
 
     void add_or_update_entry(const uint8_t* MAC, std::string user_ID);
     std::vector<StealthcomUser*> get_users();
+    StealthcomUser * get_user(std::string MAC);
 };
 
 extern std::shared_ptr<UserRegistry> user_registry;

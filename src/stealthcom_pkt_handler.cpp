@@ -77,6 +77,31 @@ static stealthcom_L2_extension * generate_ext(stealthcom_pkt_type type, std::arr
     return ext;
 }
 
+static inline bool check_dest_beacon(const struct stealthcom_L2_extension *ext) {
+    for(int x = 0; x < 6; x++) {
+        if(ext->dest_mac[x] != 0xFF) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool check_dest_self(const struct stealthcom_L2_extension *ext) {
+    for(int x = 0; x < 6; x++) {
+        if(ext->dest_mac[x] != this_MAC[x]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool is_recipient(const struct stealthcom_L2_extension *ext) {
+    if(!(check_dest_self(ext) || check_dest_beacon(ext))) {
+        return false;
+    }
+    return true;
+}
+
 static void handle_stealthcom_beacon(struct stealthcom_L2_extension *ext) {
     char user_ID_buf[USER_ID_MAX_LEN + 1];
     memcpy(user_ID_buf, ext->user_ID, ext->user_ID_len);
@@ -90,6 +115,8 @@ static void handle_stealthcom_conn_request(struct stealthcom_L2_extension *ext) 
     memcpy(user_ID_buf, ext->user_ID, ext->user_ID_len);
     user_ID_buf[ext->user_ID_len] = '\0';
     std::string user_ID_str(user_ID_buf);
+
+    user_registry->add_or_update_entry(&ext->source_MAC[0], user_ID_buf);
 
     system_push_msg("Connection request received from user [" + user_ID_str + "] with address [" + mac_addr_to_str(&ext->source_MAC[0]) + "]");
 }
@@ -108,7 +135,7 @@ void packet_handler_thread() {
         stealthcom_header *hdr = (stealthcom_header *)pkt_wrapper->buf;
         stealthcom_L2_extension *ext = (stealthcom_L2_extension *)((uint8_t *)hdr + sizeof(stealthcom_header));
 
-        if(is_self(&ext->source_MAC[0])) {
+        if(!is_recipient(ext)) {
             continue;
         }
 
