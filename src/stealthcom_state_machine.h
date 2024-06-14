@@ -10,6 +10,7 @@ enum State {
     SHOW_USERS,
     SETTINGS,
     DETAILS,
+    CONNECTION_REQUESTS,
     CHAT,
 };
 

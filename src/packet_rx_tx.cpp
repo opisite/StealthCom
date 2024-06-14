@@ -119,7 +119,6 @@ void packet_rx(void *buffer, int buffer_len) {
 
     memcpy(pkt_wrapper->buf, mac_hdr, final_packet_size);
 
-   // system_push_msg("IN PACKET_RX");
     rx_queue->push(std::move(pkt_wrapper));
     
 }
@@ -145,7 +144,6 @@ void packet_tx() {
         if (final_packet && pcap_sendpacket(handle, final_packet, final_packet_size) != 0) {
             std::cerr << "Error sending packet: " << pcap_geterr(handle) << std::endl;
         }
-       // system_push_msg("Sent packet");
     }
 
     pcap_close(handle);

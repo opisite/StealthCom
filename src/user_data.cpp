@@ -18,6 +18,16 @@ const uint8_t * get_MAC() {
     return &this_MAC[0];
 }
 
+
 std::string& get_user_ID() {
     return this_user_ID;
+}
+
+bool is_self(const uint8_t *MAC) {
+    for(int x = 0; x < 6; x++) {
+        if(MAC[x] != this_MAC[x]) {
+            return false;
+        }
+    }
+    return true;
 }

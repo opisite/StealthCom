@@ -42,7 +42,6 @@ static void send_packet(stealthcom_L2_extension * ext) {
     packet->buf = hdr;
     packet->buf_len = sizeof(stealthcom_header) + sizeof(stealthcom_L2_extension) + ext->payload_len;
 
-   // system_push_msg("IN SEND_PACKET");
     tx_queue->push(std::move(packet));
 }
 
@@ -108,7 +107,11 @@ void packet_handler_thread() {
         int packet_len = pkt_wrapper->buf_len;
         stealthcom_header *hdr = (stealthcom_header *)pkt_wrapper->buf;
         stealthcom_L2_extension *ext = (stealthcom_L2_extension *)((uint8_t *)hdr + sizeof(stealthcom_header));
-        
+
+        if(is_self(&ext->source_MAC[0])) {
+            continue;
+        }
+
         stealthcom_pkt_type type = ext->type;
 
         switch(type) {

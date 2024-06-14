@@ -5,7 +5,6 @@ void PacketQueue::push(std::unique_ptr<packet_wrapper> packet) {
     static int ID = 0;
     {
         std::lock_guard<std::mutex> lock(mtx);
-     //   system_push_msg("Pushing packet: " + std::to_string(ID++));
         queue.push(std::move(packet));
     }
     cv.notify_one();

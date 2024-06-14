@@ -270,6 +270,10 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
             }
             break;
         }
+        case CONNECTION_REQUESTS: {
+            break;
+        }
+
     }
 }
 
