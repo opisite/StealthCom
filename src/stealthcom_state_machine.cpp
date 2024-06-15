@@ -10,6 +10,7 @@
 #include "user_data.h"
 #include "stealthcom_pkt_handler.h"
 #include "user_registry.h"
+#include "request_registry.h"
 #include "utils.h"
 
 #define Y 1
@@ -29,6 +30,7 @@ static const struct {
     { "Show users", SHOW_USERS },
     { "Settings", SETTINGS },
     { "Details", DETAILS },
+    { "Connection Requests", CONNECTION_REQUESTS },
 };
 
 struct {
@@ -45,6 +47,7 @@ static const int menu_items_size = sizeof(menu_items) / sizeof(menu_items[0]);
 static const int settings_items_size = sizeof(settings_items) / sizeof(settings_items[0]);
 
 std::vector<StealthcomUser*> users;
+std::vector<StealthcomUser*> requests;
 
 static int get_item(const std::string& input, int size) {
     int index;
@@ -99,13 +102,35 @@ static void print_settings() {
 
 static void show_users_thread() {
     std::lock_guard<std::mutex> lock(running_mtx);
+    stop_flag.store(false);
     while(!stop_flag.load()) {
         users = user_registry->get_users();
         io_clr_output();
+        main_push_msg("VISIBLE USERS");
+        main_push_msg("");
         for(int x = 0; x < users.size(); x++) {
             main_push_msg(std::to_string(x + 1));
             main_push_msg("MAC Address: " + mac_addr_to_str(users[x]->getMAC().data()));
             main_push_msg("User ID: " + users[x]->getName());
+            main_push_msg("\n");
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    stop_flag.store(false);
+}
+
+static void show_connection_requests_thread() {
+    std::lock_guard<std::mutex> lock(running_mtx);
+    stop_flag.store(false);
+    while(!stop_flag.load()) {
+        requests = request_registry->get_requests();
+        io_clr_output();
+        main_push_msg("CONNECTION REQUESTS");
+        main_push_msg("");
+        for(int x = 0; x < requests.size(); x++) {
+            main_push_msg(std::to_string(x + 1));
+            main_push_msg("MAC Address: " + mac_addr_to_str(requests[x]->getMAC().data()));
+            main_push_msg("User ID: " + requests[x]->getName());
             main_push_msg("\n");
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -130,22 +155,25 @@ static inline bool is_valid_user_ID(const std::string user_ID) {
 }
 
 StealthcomStateMachine::StealthcomStateMachine() {
-    context = {
+    substate_context = {
         ENTER_INDEX,
         INVALID,
     };
     stop_flag.store(false);
+    connection_context.connection_state = UNASSOCIATED;
+    connection_context.user = nullptr;
     set_state(ENTER_USER_ID);
 }
 
-inline void StealthcomStateMachine::reset_context() {
-    context.interaction_type = ENTER_INDEX;
-    context.selected_index = INVALID;
+inline void StealthcomStateMachine::reset_substate_context() {
+    substate_context.interaction_type = ENTER_INDEX;
+    substate_context.selected_index = INVALID;
 }
 
 void StealthcomStateMachine::set_state(State state) {
+    stop_flag.store(true);
     this->state = state;
-    reset_context();
+    reset_substate_context();
     perform_state_action(state);
 }
 
@@ -173,20 +201,30 @@ void StealthcomStateMachine::perform_state_action(State state) {
             print_settings();
             break;
         }
+        case CONNECTION_REQUESTS: {
+            std::thread showConnectionRequestsThread(show_connection_requests_thread);
+            showConnectionRequestsThread.detach();
+            break;
+        }
     }
 }
 
 void StealthcomStateMachine::perform_substate_action(State state) {
+    stop_flag.store(true);
     switch (state) {
         case SHOW_USERS: {
-            stop_flag.store(true);
             io_clr_output();
-            main_push_msg("Send connection request to [" + users[context.selected_index]->getName() + "]? (Y/N)");
+            main_push_msg("Send connection request to [" + users[substate_context.selected_index]->getName() + "]? (Y/N)");
             break;
         }
         case SETTINGS: {
             io_clr_output();
-            main_push_msg("Set: " + settings_items[context.selected_index].key);
+            main_push_msg("Set: " + settings_items[substate_context.selected_index].key);
+            break;
+        }
+        case CONNECTION_REQUESTS: {
+            io_clr_output();
+            main_push_msg("Accept connection request from [" + requests[substate_context.selected_index]->getName() + "]? (Y/N)");
             break;
         }
     }
@@ -218,21 +256,23 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
         }
         case SHOW_USERS: {
             if(input == "..") {
-                stop_flag.store(true);
                 set_state(MENU);
             }
 
-            if(context.interaction_type == ENTER_INDEX) {
+            if(substate_context.interaction_type == ENTER_INDEX) {
                 int index = get_item(input, users.size());
                 if(index != INVALID) {
-                    context.selected_index = index;
-                    context.interaction_type = ENTER_VAL;
+                    substate_context.selected_index = index;
+                    substate_context.interaction_type = ENTER_VAL;
                     perform_substate_action(SHOW_USERS);
                 }
-            } else if(context.interaction_type == ENTER_VAL) {
+            } else if(substate_context.interaction_type == ENTER_VAL) {
                 int value = get_value(input);
                 if(value == Y) {
-                    send_conn_request(users[context.selected_index]);
+                    StealthcomUser *target_user = users[substate_context.selected_index];
+                    send_conn_request(target_user);
+                    connection_context.connection_state = AWAITING_CONNECTION_RESPONSE;
+                    connection_context.user = target_user;
                     set_state(SHOW_USERS);
                 } else if(value == N) {
                     set_state(SHOW_USERS);
@@ -247,18 +287,18 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
                 break;
             }
 
-            if(context.interaction_type == ENTER_INDEX) {
+            if(substate_context.interaction_type == ENTER_INDEX) {
                 int index = get_item(input, settings_items_size);
                 if(index != INVALID) {
-                    context.selected_index = index;
-                    context.interaction_type = ENTER_VAL;
+                    substate_context.selected_index = index;
+                    substate_context.interaction_type = ENTER_VAL;
                     perform_substate_action(SETTINGS);
                 }
-            } else if(context.interaction_type == ENTER_VAL) {
-                int index  = context.selected_index;
+            } else if(substate_context.interaction_type == ENTER_VAL) {
+                int index  = substate_context.selected_index;
                 int value = get_value(input, settings_items[index].range);
                 if(value != INVALID) {
-                    settings_items[context.selected_index].temp_value = std::stoi(input);
+                    settings_items[substate_context.selected_index].temp_value = std::stoi(input);
                     set_state(SETTINGS);
                 }
             }
@@ -270,5 +310,40 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
             }
             break;
         }
+        case CONNECTION_REQUESTS: {
+            if(input == "..") {
+                set_state(MENU);
+                break;
+            }
+
+            if(substate_context.interaction_type == ENTER_INDEX) {
+                int index = get_item(input, requests.size());
+                if(index != INVALID) {
+                    substate_context.selected_index = index;
+                    substate_context.interaction_type = ENTER_VAL;
+                    perform_substate_action(CONNECTION_REQUESTS);
+                }
+            } else if(substate_context.interaction_type == ENTER_VAL) {
+                int value = get_value(input);
+                StealthcomUser *target_user = users[substate_context.selected_index];
+                if(value == Y) {
+                    send_conn_request_response(target_user, true);
+                    set_state(CONNECTION_REQUESTS);
+                } else if(value == N) {
+                    send_conn_request_response(target_user, false);
+                    set_state(CONNECTION_REQUESTS);
+                }
+            }
+            break;
+        }
+
     }
+}
+
+ConnectionContext StealthcomStateMachine::get_connection_context() {
+    return connection_context;
+}
+
+void StealthcomStateMachine::set_connection_state(ConnectionState state) {
+    connection_context.connection_state = state;
 }

@@ -1,6 +1,8 @@
 #include "packet_queue.h"
+#include "io_handler.h"
 
 void PacketQueue::push(std::unique_ptr<packet_wrapper> packet) {
+    static int ID = 0;
     {
         std::lock_guard<std::mutex> lock(mtx);
         queue.push(std::move(packet));

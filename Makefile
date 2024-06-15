@@ -18,7 +18,7 @@ all:    $(MAIN)
 $(MAIN): $(OBJS) 
 	$(CC) $(CFLAGS) -o $(MAIN) $(OBJS) $(LIBS)
 
-.c.o:
+.cpp.o:
 	$(CC) $(CFLAGS) -c $<  -o $@
 
 clean:

@@ -9,6 +9,10 @@
 struct packet_wrapper {
     void *buf;
     int buf_len;
+
+    ~packet_wrapper() {
+        free(buf);
+    }
 };
 
 class PacketQueue {

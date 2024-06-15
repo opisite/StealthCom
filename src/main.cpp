@@ -13,8 +13,7 @@
 #include "stealthcom_logic.h"
 
 int main(int argc, char* argv[]) {
-    const char *device = "wlan1";
-
+    const char *device = argv[1];
 
     std::thread stealthcom(stealthcom_init, device);
 

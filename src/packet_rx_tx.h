@@ -19,8 +19,6 @@ typedef struct {
     uint8_t seq_ctrl[2];
 } __attribute__((packed)) wifi_mac_hdr_t;
 
-extern const uint8_t *this_MAC;
-
 void packet_capture_wrapper();
 void packet_rx(void *buffer, int buffer_len);
 void packet_tx();
