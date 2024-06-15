@@ -13,7 +13,7 @@ public:
     StealthcomUser* user;
     int ttl;
 
-    RequestRegistryEntry(StealthcomUser* u, int time_to_live, bool conn)
+    RequestRegistryEntry(StealthcomUser* u, int time_to_live)
         : user(u), ttl(time_to_live) {}
 };
 
@@ -28,7 +28,7 @@ public:
     RequestRegistry();
     ~RequestRegistry();
 
-    void add_or_update_entry(const uint8_t* MAC, std::string user_ID);
+    void add_or_update_entry(const uint8_t* MAC);
     std::vector<StealthcomUser*> get_requests();
 };
 

@@ -2,7 +2,7 @@
 #include "user_registry.h"
 #include "utils.h"
 
-#define TIME_TO_LIVE 30
+#define TIME_TO_LIVE 15
 
 RequestRegistry::RequestRegistry() : BaseRegistry() {}
 
@@ -18,7 +18,6 @@ void RequestRegistry::decrement_ttl_and_remove_expired() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto it = registry.begin(); it != registry.end(); ) {
         if (--it->second->ttl <= 0) {
-            delete it->second->user;
             delete it->second;
             it = registry.erase(it);
         } else {
@@ -27,21 +26,23 @@ void RequestRegistry::decrement_ttl_and_remove_expired() {
     }
 }
 
-void RequestRegistry::add_or_update_entry(const uint8_t* MAC, std::string user_ID) {
+void RequestRegistry::add_or_update_entry(const uint8_t* MAC) {
     std::string MAC_str = mac_addr_to_str(MAC);
 
     std::lock_guard<std::mutex> lock(registryMutex);
 
+    StealthcomUser *user = user_registry->get_user(MAC_str);
+
+    if(user == nullptr) {
+        return;
+    }
+
     auto it = registry.find(MAC_str);
     if (it != registry.end()) {
         RequestRegistryEntry* entry = it->second;
-        if (entry->user->getName() != user_ID) {
-            delete entry->user;
-            entry->user = new StealthcomUser(user_ID, MAC);
-        }
         entry->ttl = TIME_TO_LIVE;
     } else {
-        registry[MAC_str] = new RequestRegistryEntry(new StealthcomUser(user_ID, MAC), TIME_TO_LIVE, false);
+        registry[MAC_str] = new RequestRegistryEntry(user, TIME_TO_LIVE);
     }
 }
 

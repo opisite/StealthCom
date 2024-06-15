@@ -40,8 +40,8 @@ class StealthcomStateMachine {
     public:
         StealthcomStateMachine();
         void handle_input(const std::string& input);
+        void set_connection_state(ConnectionState state);
         
-
     private:
         void set_state(State state);
         void perform_state_action(State state);

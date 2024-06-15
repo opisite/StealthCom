@@ -10,13 +10,15 @@
 enum class stealthcom_pkt_type : uint8_t {
     BEACON = 0,
     CONNECT_REQUEST,
+    CONNECT_ACCEPT,
+    CONNECT_REFUSE,
     KEY_EXCHANGE,
 };
 
 struct __attribute__((packed)) stealthcom_L2_extension {
     stealthcom_pkt_type type;
     uint8_t source_MAC[6];
-    uint8_t dest_mac[6];
+    uint8_t dest_MAC[6];
     uint8_t user_ID_len;
     char user_ID[USER_ID_MAX_LEN];
     uint8_t payload_len;
@@ -50,5 +52,6 @@ void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 void set_advertise(int set);
 void send_conn_request(StealthcomUser *user);
+void send_conn_request_response(StealthcomUser *user, bool accept);
 
 #endif
