@@ -4,7 +4,7 @@
 
 #define TIME_TO_LIVE 15
 
-RequestRegistry::RequestRegistry() : BaseRegistry() {}
+RequestRegistry::RequestRegistry() : Registry() {}
 
 RequestRegistry::~RequestRegistry() {
     std::lock_guard<std::mutex> lock(registryMutex);

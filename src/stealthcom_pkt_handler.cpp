@@ -13,13 +13,27 @@
 #include "user_registry.h"
 #include "request_registry.h"
 #include "io_handler.h"
+#include "stealthcom_connection_logic.h"
 
 std::atomic<bool> advertise_stop_flag;
 
 static std::shared_ptr<PacketQueue> rx_queue;
 static std::shared_ptr<PacketQueue> tx_queue;
+static std::shared_ptr<PacketQueue> connect_pkt_queue;
 
-static void send_packet(stealthcom_L2_extension * ext) {
+void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
+    rx_queue = rx;
+    tx_queue = tx;
+
+    connect_pkt_queue = std::make_shared<PacketQueue>();
+    connection_worker_init(connect_pkt_queue);
+    std::thread connectWorkerThread(connection_worker_thread);
+    connectWorkerThread.detach();
+
+    advertise_stop_flag.store(false);
+}
+
+void send_packet(stealthcom_L2_extension * ext) {
     static stealthcom_header hdr_template = {
         .frame_ctrl =               {0x40, 0x00},
         .duration_id =              {0x00, 0x00},
@@ -46,7 +60,7 @@ static void send_packet(stealthcom_L2_extension * ext) {
     tx_queue->push(std::move(packet));
 }
 
-static stealthcom_L2_extension * generate_ext(stealthcom_pkt_type type, uint8_t payload_len) {
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, uint8_t payload_len) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
     int user_ID_len = this_user_ID.length();
@@ -62,7 +76,7 @@ static stealthcom_L2_extension * generate_ext(stealthcom_pkt_type type, uint8_t 
     return ext;
 }
 
-static stealthcom_L2_extension * generate_ext(stealthcom_pkt_type type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len) {
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
     int user_ID_len = this_user_ID.length();
@@ -77,7 +91,6 @@ static stealthcom_L2_extension * generate_ext(stealthcom_pkt_type type, std::arr
 
     return ext;
 }
-
 
 static inline bool check_dest_beacon(const struct stealthcom_L2_extension *ext) {
     for(int x = 0; x < 6; x++) {
@@ -112,30 +125,7 @@ static inline bool is_recipient(const struct stealthcom_L2_extension *ext) {
 }
 
 static void handle_stealthcom_beacon(struct stealthcom_L2_extension *ext) {
-    char user_ID_buf[USER_ID_MAX_LEN + 1];
-    memcpy(user_ID_buf, ext->user_ID, ext->user_ID_len);
-    user_ID_buf[ext->user_ID_len] = '\0';
-
-    user_registry->add_or_update_entry(&ext->source_MAC[0], user_ID_buf);
-}
-
-static void handle_stealthcom_conn_request(struct stealthcom_L2_extension *ext) {
-    char user_ID_buf[USER_ID_MAX_LEN + 1];
-    memcpy(user_ID_buf, ext->user_ID, ext->user_ID_len);
-    user_ID_buf[ext->user_ID_len] = '\0';
-    std::string user_ID_str(user_ID_buf);
-
-    user_registry->add_or_update_entry(&ext->source_MAC[0], user_ID_buf);
-    request_registry->add_or_update_entry(&ext->source_MAC[0]);
-
-    system_push_msg("Connection request received from user [" + user_ID_str + "] with address [" + mac_addr_to_str(&ext->source_MAC[0]) + "]");
-}
-
-void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
-    rx_queue = rx;
-    tx_queue = tx;
-
-    advertise_stop_flag.store(false);
+    return;
 }
 
 void packet_handler_thread() {
@@ -145,45 +135,32 @@ void packet_handler_thread() {
         stealthcom_header *hdr = (stealthcom_header *)pkt_wrapper->buf;
         stealthcom_L2_extension *ext = (stealthcom_L2_extension *)((uint8_t *)hdr + sizeof(stealthcom_header));
 
-        if(!is_recipient(ext)) {
-            continue;
-        }
+        //if(!is_recipient(ext)) {
+        //    continue;
+        //}
 
-        stealthcom_pkt_type type = ext->type;
+        char user_ID_buf[USER_ID_MAX_LEN + 1];
+        memcpy(user_ID_buf, ext->user_ID, ext->user_ID_len);
+        user_ID_buf[ext->user_ID_len] = '\0';
+
+        user_registry->add_or_update_entry(&ext->source_MAC[0], user_ID_buf);
+        sc_pkt_type_t type = ext->type & EXT_TYPE_BITMASK;
 
         switch(type) {
-            case stealthcom_pkt_type::BEACON: {
-                handle_stealthcom_beacon(ext);
+            case BEACON: {
                 break;
             }
-            case stealthcom_pkt_type::CONNECT_REQUEST: {
-                handle_stealthcom_conn_request(ext);
+            case CONNECT: {
+                stealthcom_L2_extension *ext_c = (stealthcom_L2_extension *)malloc(sizeof(stealthcom_L2_extension) - 1);
+                memcpy(ext_c, ext, sizeof(stealthcom_L2_extension) - 1);
+                std::unique_ptr<packet_wrapper> ext_wrapper = std::make_unique<packet_wrapper>();
+                ext_wrapper->buf_len = packet_len - sizeof(stealthcom_header);
+                ext_wrapper->buf = ext_c;
+                connect_pkt_queue->push(std::move(ext_wrapper));
                 break;
             }
         }
     }
-}
-
-void send_conn_request(StealthcomUser *user) {
-    std::array<uint8_t, 6> MAC = user->getMAC();
-    system_push_msg("Sending connection request to user [" + user->getName() + "] with address [" + mac_addr_to_str(MAC.data()) + "]");
-
-    stealthcom_L2_extension *ext = generate_ext(stealthcom_pkt_type::CONNECT_REQUEST, MAC, 0);
-
-    send_packet(ext);
-}
-
-void send_conn_request_response(StealthcomUser *user, bool accept) {
-    std::array<uint8_t, 6> MAC = user->getMAC();
-
-    stealthcom_L2_extension *ext;
-    if(accept) {
-        ext = generate_ext(stealthcom_pkt_type::CONNECT_ACCEPT, MAC, 0);
-    } else {
-        ext = generate_ext(stealthcom_pkt_type::CONNECT_REFUSE, MAC, 0);
-    }
-
-    send_packet(ext);
 }
 
 void set_advertise(int set) {
@@ -196,7 +173,7 @@ void set_advertise(int set) {
 }
 
 void user_advertise_thread() {
-    stealthcom_L2_extension *ext = generate_ext(stealthcom_pkt_type::BEACON, 0);
+    stealthcom_L2_extension *ext = generate_ext(BEACON, 0);
 
     while(!advertise_stop_flag.load()) {
         send_packet(ext);

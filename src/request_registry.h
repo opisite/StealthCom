@@ -17,7 +17,7 @@ public:
         : user(u), ttl(time_to_live) {}
 };
 
-class RequestRegistry : public BaseRegistry<RequestRegistryEntry> {
+class RequestRegistry : public Registry<RequestRegistryEntry> {
 private:
     std::unordered_map<std::string, RequestRegistryEntry*> registry;
 

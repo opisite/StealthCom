@@ -6,7 +6,7 @@
 #include <chrono>
 
 template <typename T>
-class BaseRegistry {
+class Registry {
 protected:
     std::mutex registryMutex;
     bool running;
@@ -22,8 +22,8 @@ protected:
     }
 
 public:
-    BaseRegistry() : running(true), registryManagerThread([this] { registry_manager_thread(); }) {}
-    virtual ~BaseRegistry() {
+    Registry() : running(true), registryManagerThread([this] { registry_manager_thread(); }) {}
+    virtual ~Registry() {
         running = false;
         if (registryManagerThread.joinable()) {
             registryManagerThread.join();

@@ -7,16 +7,24 @@
 #include "packet_queue.h"
 #include "stealthcom_logic.h"
 
-enum class stealthcom_pkt_type : uint8_t {
-    BEACON = 0,
-    CONNECT_REQUEST,
-    CONNECT_ACCEPT,
-    CONNECT_REFUSE,
-    KEY_EXCHANGE,
-};
+#define EXT_TYPE_BIT_SHIFT  4
+#define EXT_TYPE_BITMASK    0xF0
+#define EXT_SUBTYPE_BITMASK 0x0F
+
+// TYPE ENUMERATION
+#define BEACON  0 << EXT_TYPE_BIT_SHIFT
+#define CONNECT 1 << EXT_TYPE_BIT_SHIFT
+
+// CONNECT SUBTYPE ENUMERATION
+#define REQUEST    0
+#define ACCEPT     1
+#define REFUSE     2
+#define ACCEPT_ACK 3
+
+typedef uint8_t sc_pkt_type_t;
 
 struct __attribute__((packed)) stealthcom_L2_extension {
-    stealthcom_pkt_type type;
+    sc_pkt_type_t type;
     uint8_t source_MAC[6];
     uint8_t dest_MAC[6];
     uint8_t user_ID_len;
@@ -51,7 +59,10 @@ void user_advertise_thread();
 void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 void set_advertise(int set);
-void send_conn_request(StealthcomUser *user);
-void send_conn_request_response(StealthcomUser *user, bool accept);
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len);
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, uint8_t payload_len);
+void send_packet(stealthcom_L2_extension * ext);
+
+
 
 #endif
