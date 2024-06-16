@@ -2,7 +2,7 @@
 #include "user_registry.h"
 #include "utils.h"
 
-#define TIME_TO_LIVE 15
+#define TIME_TO_LIVE 30
 
 RequestRegistry::RequestRegistry() : Registry() {}
 

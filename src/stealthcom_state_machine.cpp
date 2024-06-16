@@ -125,6 +125,7 @@ static void show_connection_requests_thread() {
     stop_flag.store(false);
     while(!stop_flag.load()) {
         requests = request_registry->get_requests();
+        users = user_registry->get_users();
         io_clr_output();
         main_push_msg("CONNECTION REQUESTS");
         main_push_msg("");

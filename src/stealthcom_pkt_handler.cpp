@@ -135,9 +135,9 @@ void packet_handler_thread() {
         stealthcom_header *hdr = (stealthcom_header *)pkt_wrapper->buf;
         stealthcom_L2_extension *ext = (stealthcom_L2_extension *)((uint8_t *)hdr + sizeof(stealthcom_header));
 
-        //if(!is_recipient(ext)) {
-        //    continue;
-        //}
+        if(!is_recipient(ext)) {
+            continue;
+        }
 
         char user_ID_buf[USER_ID_MAX_LEN + 1];
         memcpy(user_ID_buf, ext->user_ID, ext->user_ID_len);
