@@ -2,9 +2,9 @@
 #include "utils.h"
 
 #define TIME_TO_LIVE 30
-#define CONNECTED_TIME_TO_LIVE 120
+#define CONNECTED_TIME_TO_LIVE 300
 
-UserRegistry::UserRegistry() : BaseRegistry() {}
+UserRegistry::UserRegistry() : Registry() {}
 
 UserRegistry::~UserRegistry() {
     std::lock_guard<std::mutex> lock(registryMutex);
@@ -55,7 +55,7 @@ std::vector<StealthcomUser*> UserRegistry::get_users() {
     return users;
 }
 
-StealthcomUser * UserRegistry::get_user(std::string MAC) {
+StealthcomUser * UserRegistry::get_user(std::string& MAC) {
     std::lock_guard<std::mutex> lock(registryMutex);
     auto it = registry.find(MAC);
     if (it != registry.end()) {

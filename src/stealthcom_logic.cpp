@@ -18,7 +18,7 @@
 #include "request_registry.h"
 
 static MessageQueue *input_queue;
-static StealthcomStateMachine *state_machine;
+StealthcomStateMachine *state_machine;
 
 std::shared_ptr<UserRegistry> user_registry;
 std::shared_ptr<RequestRegistry> request_registry;

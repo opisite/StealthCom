@@ -20,6 +20,8 @@ static MessageQueue *system_queue;
 static WINDOW *input_win;
 static WINDOW *system_win;
 static WINDOW *main_win;
+static WINDOW *system_win_buffer;
+static WINDOW *main_win_buffer;
 static char *input;
 
 static std::mutex mtx;
@@ -28,15 +30,17 @@ static int main_win_line = INITIAL_WINDOW_LINE;
 static int system_win_line = INITIAL_WINDOW_LINE;
 
 static void draw_sys_window() {
-    box(system_win, 0, 0);
-    wprintw(system_win, "SYSTEM");
-    wrefresh(system_win);
+    werase(system_win_buffer);
+    box(system_win_buffer, 0, 0);
+    mvwprintw(system_win_buffer, 0, 2, "SYSTEM");
+    wrefresh(system_win_buffer);
 }
 
 static void draw_main_window() {
-    box(main_win, 0, 0);
-    wprintw(main_win, "MAIN");
-    wrefresh(main_win);
+    werase(main_win_buffer);
+    box(main_win_buffer, 0, 0);
+    mvwprintw(main_win_buffer, 0, 2, "MAIN");
+    wrefresh(main_win_buffer);
 }
 
 void ncurses_init() {
@@ -52,10 +56,13 @@ void ncurses_init() {
     main_win = newwin(rows / 2, cols, 0, 0);
     system_win = newwin(rows / 2, cols, rows / 2, 0);
 
+    main_win_buffer = newwin(rows / 2, cols, 0, 0);
+    system_win_buffer = newwin(rows / 2, cols, rows / 2, 0);
+
     draw_main_window();
     draw_sys_window();
 
-    scrollok(main_win, TRUE);
+    scrollok(main_win_buffer, TRUE);
 
     input = new char[INPUT_BUFFER_SIZE];
     memset(input, 0, INPUT_BUFFER_SIZE);
@@ -69,9 +76,8 @@ void ncurses_init() {
 void io_clr_output() {
     std::lock_guard<std::mutex> lock(mtx);
     main_win_line = INITIAL_WINDOW_LINE;
-    wclear(main_win);
+    werase(main_win_buffer);
     draw_main_window();
-    wrefresh(main_win);
 }
 
 void main_push_msg(const std::string& message) {
@@ -113,27 +119,27 @@ void ncurses_thread() {
 
             {
                 std::lock_guard<std::mutex> lock(mtx);
-                wclear(input_win);
+                werase(input_win);
                 mvwprintw(input_win, 0, 0, "> %s", input);
                 wrefresh(input_win);
             }
         }
 
-        while (!main_queue->empty()) {  // Empty main_queue into main window
+        while (!main_queue->empty()) {  // Empty main_queue into main window buffer
             std::string msg = main_queue->pop();
             {
                 std::lock_guard<std::mutex> lock(mtx);
-                mvwprintw(main_win, main_win_line++, 2,  "%s\n", msg.c_str());
-                wrefresh(main_win);
+                mvwprintw(main_win_buffer, main_win_line++, 2, "%s\n", msg.c_str());
+                wrefresh(main_win_buffer);
             }
         }
 
-        while (!system_queue->empty()) {    // Empty system_queue into system window
+        while (!system_queue->empty()) {  // Empty system_queue into system window buffer
             std::string msg = system_queue->pop();
             {
                 std::lock_guard<std::mutex> lock(mtx);
-                mvwprintw(system_win, system_win_line++, 2,  "%s\n", msg.c_str());
-                wrefresh(system_win);
+                mvwprintw(system_win_buffer, system_win_line++, 2, "%s\n", msg.c_str());
+                wrefresh(system_win_buffer);
             }
         }
 
@@ -145,5 +151,7 @@ void ncurses_thread() {
     delwin(input_win);
     delwin(main_win);
     delwin(system_win);
+    delwin(main_win_buffer);
+    delwin(system_win_buffer);
     endwin();
 }
