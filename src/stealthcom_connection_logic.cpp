@@ -19,8 +19,7 @@ void connection_worker_init(std::shared_ptr<PacketQueue> queue) {
 }
 
 static void handle_stealthcom_conn_request(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
-    user_registry->add_or_update_entry(&ext->source_MAC[0], user_ID_str);
-    request_registry->add_or_update_entry(&ext->source_MAC[0]);
+    request_registry->add_or_update_entry(&ext->source_MAC[0], INBOUND);
 
     system_push_msg("Connection request received from user [" + user_ID_str + "] with address [" + mac_addr_to_str(&ext->source_MAC[0]) + "]");
 }
@@ -55,6 +54,7 @@ static void handle_stealthcom_conn_accept(struct stealthcom_L2_extension *ext, s
     }
 
     send_conn_accept_ack(user);
+    user_registry->notify_connect(MAC_str);
     state_machine->set_connection_state(CONNECTED);
     system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] accepted your connection request - you may now exchange messages");
 }
@@ -67,6 +67,8 @@ static void handle_stealthcom_conn_accept_ack(struct stealthcom_L2_extension *ex
         return;
     }
 
+
+    user_registry->notify_connect(MAC_str);
     state_machine->set_connection_state(CONNECTED);
     system_push_msg("Now connected to user [" + user_ID_str + "] with address [" + MAC_str + "] - you may now exchange messages");
 }
@@ -112,6 +114,7 @@ void send_conn_request(StealthcomUser *user) {
     stealthcom_L2_extension *ext = generate_ext(CONNECT | REQUEST, MAC, 0);
 
     send_packet(ext);
+    request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
 
     state_machine->set_connection_state_and_user(AWAITING_CONNECTION_RESPONSE, user);
 }
@@ -128,4 +131,5 @@ void send_conn_request_response(StealthcomUser *user, bool accept) {
     }
 
     send_packet(ext);
+    request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
 }

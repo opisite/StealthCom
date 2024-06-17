@@ -125,7 +125,6 @@ static void show_connection_requests_thread() {
     stop_flag.store(false);
     while(!stop_flag.load()) {
         requests = request_registry->get_requests();
-        users = user_registry->get_users();
         io_clr_output();
         main_push_msg("CONNECTION REQUESTS");
         main_push_msg("");
@@ -176,6 +175,7 @@ void StealthcomStateMachine::set_state(State state) {
     stop_flag.store(true);
     this->state = state;
     reset_substate_context();
+    user_registry->unprotect_users();
     perform_state_action(state);
 }
 
@@ -215,6 +215,7 @@ void StealthcomStateMachine::perform_substate_action(State state) {
     stop_flag.store(true);
     switch (state) {
         case SHOW_USERS: {
+            user_registry->protect_users();
             io_clr_output();
             main_push_msg("Send connection request to [" + users[substate_context.selected_index]->getName() + "]? (Y/N)");
             break;
@@ -225,6 +226,7 @@ void StealthcomStateMachine::perform_substate_action(State state) {
             break;
         }
         case CONNECTION_REQUESTS: {
+            user_registry->protect_users();
             io_clr_output();
             main_push_msg("Accept connection request from [" + requests[substate_context.selected_index]->getName() + "]? (Y/N)");
             break;
@@ -318,7 +320,7 @@ void StealthcomStateMachine::handle_input_connection_requests(const std::string&
         }
     } else if(substate_context.interaction_type == ENTER_VAL) {
         int value = get_value(input);
-        StealthcomUser *target_user = users[substate_context.selected_index];
+        StealthcomUser *target_user = requests[substate_context.selected_index];
         if(value == Y) {
             send_conn_request_response(target_user, true);
             set_state(CONNECTION_REQUESTS);
@@ -376,6 +378,13 @@ void StealthcomStateMachine::set_connection_state_and_user(ConnectionState state
 }
 
 void StealthcomStateMachine::reset_connection_context() {
+    StealthcomUser *user = connection_context.user;
+    if(connection_context.connection_state == CONNECTED) {
+        system_push_msg("Connection to user [" + user->getName() + "] timed out");
+    } else if(connection_context.connection_state == AWAITING_CONNECTION_RESPONSE) {
+        system_push_msg("Request to user [" + user->getName() + "] timed out");
+    }
+
     connection_context.connection_state = UNASSOCIATED;
     connection_context.user = nullptr;
 }
