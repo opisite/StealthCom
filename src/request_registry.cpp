@@ -1,5 +1,6 @@
 #include "request_registry.h"
 #include "user_registry.h"
+#include "stealthcom_state_machine.h"
 #include "utils.h"
 
 #define TIME_TO_LIVE 30
@@ -17,8 +18,12 @@ RequestRegistry::~RequestRegistry() {
 void RequestRegistry::decrement_ttl_and_remove_expired() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto it = registry.begin(); it != registry.end(); ) {
-        if (--it->second->ttl <= 0) {
-            delete it->second;
+        RequestRegistryEntry* entry = it->second;
+        if (--entry->ttl <= 0) {
+            if(entry->direction == OUTBOUND && state_machine->get_connection_context().connection_state == AWAITING_CONNECTION_RESPONSE) {
+                state_machine->reset_connection_context();
+            }
+            delete entry;
             it = registry.erase(it);
         } else {
             ++it;
@@ -26,7 +31,7 @@ void RequestRegistry::decrement_ttl_and_remove_expired() {
     }
 }
 
-void RequestRegistry::add_or_update_entry(const uint8_t* MAC) {
+void RequestRegistry::add_or_update_entry(const uint8_t* MAC, bool direction) {
     std::string MAC_str = mac_addr_to_str(MAC);
 
     std::lock_guard<std::mutex> lock(registryMutex);
@@ -41,8 +46,11 @@ void RequestRegistry::add_or_update_entry(const uint8_t* MAC) {
     if (it != registry.end()) {
         RequestRegistryEntry* entry = it->second;
         entry->ttl = TIME_TO_LIVE;
+        if(direction == INBOUND && entry->direction == OUTBOUND) {
+            entry->direction = INBOUND;
+        }
     } else {
-        registry[MAC_str] = new RequestRegistryEntry(user, TIME_TO_LIVE);
+        registry[MAC_str] = new RequestRegistryEntry(user, TIME_TO_LIVE, direction);
     }
 }
 
@@ -50,7 +58,14 @@ std::vector<StealthcomUser*> RequestRegistry::get_requests() {
     std::lock_guard<std::mutex> lock(registryMutex);
     std::vector<StealthcomUser*> users;
     for (const auto& entry : registry) {
-        users.push_back(entry.second->user);
+        if(!entry.second->direction) {
+            users.push_back(entry.second->user);
+        }
     }
     return users;
+}
+
+bool RequestRegistry::has_active_request(const std::string& MAC) {
+    auto it = registry.find(MAC);
+    return it != registry.end();
 }

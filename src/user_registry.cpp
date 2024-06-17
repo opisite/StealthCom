@@ -1,8 +1,10 @@
 #include "user_registry.h"
 #include "utils.h"
+#include "request_registry.h"
+#include "stealthcom_state_machine.h"
 
-#define TIME_TO_LIVE 30
-#define CONNECTED_TIME_TO_LIVE 300
+#define TIME_TO_LIVE 10
+#define CONNECTED_TIME_TO_LIVE 60
 
 UserRegistry::UserRegistry() : Registry() {}
 
@@ -17,9 +19,13 @@ UserRegistry::~UserRegistry() {
 void UserRegistry::decrement_ttl_and_remove_expired() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto it = registry.begin(); it != registry.end(); ) {
-        if (--it->second->ttl <= 0) {
-            delete it->second->user;
-            delete it->second;
+        UserRegistryEntry* entry = it->second;
+        if (--entry->ttl <= 0 && !request_registry->has_active_request(it->first) && !users_protected.load()) {
+            if(entry->connected) {
+                state_machine->reset_connection_context();
+            }
+            delete entry->user;
+            delete entry;
             it = registry.erase(it);
         } else {
             ++it;
@@ -64,4 +70,21 @@ StealthcomUser * UserRegistry::get_user(std::string& MAC) {
     } else {
         return nullptr;
     }
+}
+
+void UserRegistry::notify_connect(std::string& MAC) {
+    auto it = registry.find(MAC);
+    if (it != registry.end()) {
+        UserRegistryEntry* entry = it->second;
+        entry->ttl = CONNECTED_TIME_TO_LIVE;
+        entry->connected = true;
+    }
+}
+
+void UserRegistry::protect_users() {
+    users_protected.store(true);
+}
+
+void UserRegistry::unprotect_users() {
+    users_protected.store(false);
 }

@@ -56,7 +56,6 @@ void stealthcom_init(const char *netif) {
 void stealthcom_main_thread() {
     while(true) {
         std::string msg = input_queue->pop();
-
         state_machine->handle_input(msg);
     }
 

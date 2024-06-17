@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <atomic>
 #include "registry.h"
 #include "stealthcom_user.h"
 
@@ -21,6 +22,7 @@ public:
 class UserRegistry : public Registry<UserRegistryEntry> {
 private:
     std::unordered_map<std::string, UserRegistryEntry*> registry;
+    std::atomic<bool> users_protected;
 
 protected:
     void decrement_ttl_and_remove_expired() override;
@@ -32,6 +34,9 @@ public:
     void add_or_update_entry(const uint8_t* MAC, std::string user_ID);
     std::vector<StealthcomUser*> get_users();
     StealthcomUser * get_user(std::string& MAC);
+    void notify_connect(std::string& MAC);
+    void protect_users();
+    void unprotect_users();
 };
 
 extern std::shared_ptr<UserRegistry> user_registry;

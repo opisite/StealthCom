@@ -8,13 +8,17 @@
 #include "registry.h"
 #include "stealthcom_user.h"
 
+#define OUTBOUND true
+#define INBOUND  false
+
 class RequestRegistryEntry {
 public:
     StealthcomUser* user;
     int ttl;
+    bool direction;
 
-    RequestRegistryEntry(StealthcomUser* u, int time_to_live)
-        : user(u), ttl(time_to_live) {}
+    RequestRegistryEntry(StealthcomUser* u, int time_to_live, bool direction)
+        : user(u), ttl(time_to_live), direction(direction) {}
 };
 
 class RequestRegistry : public Registry<RequestRegistryEntry> {
@@ -28,8 +32,9 @@ public:
     RequestRegistry();
     ~RequestRegistry();
 
-    void add_or_update_entry(const uint8_t* MAC);
+    void add_or_update_entry(const uint8_t* MAC, bool direction);
     std::vector<StealthcomUser*> get_requests();
+    bool has_active_request(const std::string& MAC);
 };
 
 extern std::shared_ptr<RequestRegistry> request_registry;
