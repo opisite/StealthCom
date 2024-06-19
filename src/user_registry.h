@@ -23,6 +23,7 @@ class UserRegistry : public Registry<UserRegistryEntry> {
 private:
     std::unordered_map<std::string, UserRegistryEntry*> registry;
     std::atomic<bool> users_protected;
+    bool registry_updated;
 
 protected:
     void decrement_ttl_and_remove_expired() override;
@@ -37,6 +38,8 @@ public:
     void notify_connect(std::string& MAC);
     void protect_users();
     void unprotect_users();
+    bool registry_update();
+    void raise_update_flag();
 };
 
 extern std::shared_ptr<UserRegistry> user_registry;

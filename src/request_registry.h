@@ -24,6 +24,7 @@ public:
 class RequestRegistry : public Registry<RequestRegistryEntry> {
 private:
     std::unordered_map<std::string, RequestRegistryEntry*> registry;
+    bool registry_updated;
 
 protected:
     void decrement_ttl_and_remove_expired() override;
@@ -35,6 +36,8 @@ public:
     void add_or_update_entry(const uint8_t* MAC, bool direction);
     std::vector<StealthcomUser*> get_requests();
     bool has_active_request(const std::string& MAC);
+    bool registry_update();
+    void raise_update_flag();
 };
 
 extern std::shared_ptr<RequestRegistry> request_registry;

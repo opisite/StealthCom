@@ -5,7 +5,7 @@
 
 #define TIME_TO_LIVE 30
 
-RequestRegistry::RequestRegistry() : Registry() {}
+RequestRegistry::RequestRegistry() : Registry(), registry_updated(true) {}
 
 RequestRegistry::~RequestRegistry() {
     std::lock_guard<std::mutex> lock(registryMutex);
@@ -25,6 +25,7 @@ void RequestRegistry::decrement_ttl_and_remove_expired() {
             }
             delete entry;
             it = registry.erase(it);
+            registry_updated = true;
         } else {
             ++it;
         }
@@ -51,6 +52,7 @@ void RequestRegistry::add_or_update_entry(const uint8_t* MAC, bool direction) {
         }
     } else {
         registry[MAC_str] = new RequestRegistryEntry(user, TIME_TO_LIVE, direction);
+        registry_updated = true;
     }
 }
 
@@ -62,10 +64,19 @@ std::vector<StealthcomUser*> RequestRegistry::get_requests() {
             users.push_back(entry.second->user);
         }
     }
+    registry_updated = false;
     return users;
 }
 
 bool RequestRegistry::has_active_request(const std::string& MAC) {
     auto it = registry.find(MAC);
     return it != registry.end();
+}
+
+bool RequestRegistry::registry_update() {
+    return registry_updated;
+}
+
+void RequestRegistry::raise_update_flag() {
+    registry_updated = true;;
 }

@@ -52,6 +52,7 @@ class StealthcomStateMachine {
         void reset_substate_context();
         void handle_input_enter_user_ID(const std::string& input);
         void handle_input_menu(const std::string& input);
+        void handle_input_msg(const std::string& input);
         void handle_input_show_users(const std::string& input);
         void handle_input_settings(const std::string& input);
         void handle_input_details(const std::string& input);

@@ -2,7 +2,7 @@
 #define STEALTHCOM_CONNECTION_LOGIC_H
 
 #include <memory>
-#include "packet_queue.h"
+#include "packet_rx_tx.h"
 #include "stealthcom_user.h"
 
 void connection_worker_init(std::shared_ptr<PacketQueue> queue);

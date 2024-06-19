@@ -39,7 +39,7 @@ static void handle_stealthcom_conn_refuse(struct stealthcom_L2_extension *ext, s
 static void send_conn_accept_ack(StealthcomUser *user) {
     std::array<uint8_t, 6> MAC = user->getMAC();
 
-    stealthcom_L2_extension *ext = generate_ext(CONNECT | ACCEPT_ACK, MAC, 0);
+    stealthcom_L2_extension *ext = generate_ext(CONNECT | ACCEPT_ACK, MAC);
 
     send_packet(ext);
 }
@@ -111,7 +111,7 @@ void send_conn_request(StealthcomUser *user) {
     std::array<uint8_t, 6> MAC = user->getMAC();
     system_push_msg("Sending connection request to user [" + user->getName() + "] with address [" + mac_addr_to_str(MAC.data()) + "]");
 
-    stealthcom_L2_extension *ext = generate_ext(CONNECT | REQUEST, MAC, 0);
+    stealthcom_L2_extension *ext = generate_ext(CONNECT | REQUEST, MAC);
 
     send_packet(ext);
     request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
@@ -124,10 +124,10 @@ void send_conn_request_response(StealthcomUser *user, bool accept) {
 
     stealthcom_L2_extension *ext;
     if(accept) {
-        ext = generate_ext(CONNECT | ACCEPT, MAC, 0);
+        ext = generate_ext(CONNECT | ACCEPT, MAC);
         state_machine->set_connection_state_and_user(AWAITING_CONNECTION_RESPONSE, user);
     } else {
-        ext = generate_ext(CONNECT | REFUSE, MAC, 0);
+        ext = generate_ext(CONNECT | REFUSE, MAC);
     }
 
     send_packet(ext);

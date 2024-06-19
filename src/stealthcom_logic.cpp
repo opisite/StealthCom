@@ -7,17 +7,17 @@
 #include <pcap.h>
 #include <iostream>
 
-#include "packet_rx_tx.h"
 #include "io_handler.h"
 #include "utils.h"
+#include "packet_rx_tx.h"
 #include "stealthcom_pkt_handler.h"
 #include "stealthcom_logic.h"
-#include "message_queue.h"
+#include "thread_safe_queue.h"
 #include "stealthcom_state_machine.h"
 #include "user_registry.h"
 #include "request_registry.h"
 
-static MessageQueue *input_queue;
+static InputQueue *input_queue;
 StealthcomStateMachine *state_machine;
 
 std::shared_ptr<UserRegistry> user_registry;
@@ -46,7 +46,7 @@ void stealthcom_init(const char *netif) {
     std::thread packetHandlerThread(packet_handler_thread);
     packetHandlerThread.detach();
 
-    input_queue = new MessageQueue();
+    input_queue = new InputQueue();
     state_machine = new StealthcomStateMachine();
 
 

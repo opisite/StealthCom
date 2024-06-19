@@ -6,7 +6,7 @@
 #define TIME_TO_LIVE 10
 #define CONNECTED_TIME_TO_LIVE 60
 
-UserRegistry::UserRegistry() : Registry() {}
+UserRegistry::UserRegistry() : Registry(), registry_updated(true) {}
 
 UserRegistry::~UserRegistry() {
     std::lock_guard<std::mutex> lock(registryMutex);
@@ -27,6 +27,7 @@ void UserRegistry::decrement_ttl_and_remove_expired() {
             delete entry->user;
             delete entry;
             it = registry.erase(it);
+            registry_updated = true;
         } else {
             ++it;
         }
@@ -49,6 +50,7 @@ void UserRegistry::add_or_update_entry(const uint8_t* MAC, std::string user_ID) 
         entry->ttl = entry->connected ? CONNECTED_TIME_TO_LIVE : TIME_TO_LIVE;
     } else {
         registry[MAC_str] = new UserRegistryEntry(new StealthcomUser(user_ID, MAC), TIME_TO_LIVE, false);
+        registry_updated = true;
     }
 }
 
@@ -58,6 +60,7 @@ std::vector<StealthcomUser*> UserRegistry::get_users() {
     for (const auto& entry : registry) {
         users.push_back(entry.second->user);
     }
+    registry_updated = false;
     return users;
 }
 
@@ -87,4 +90,12 @@ void UserRegistry::protect_users() {
 
 void UserRegistry::unprotect_users() {
     users_protected.store(false);
+}
+
+bool UserRegistry::registry_update() {
+    return registry_updated;
+}
+
+void UserRegistry::raise_update_flag() {
+    registry_updated = true;
 }
