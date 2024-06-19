@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "packet_queue.h"
+#include "packet_rx_tx.h"
 #include "stealthcom_logic.h"
 
 #define EXT_TYPE_BIT_SHIFT  4
@@ -14,12 +14,18 @@
 // TYPE ENUMERATION
 #define BEACON  0 << EXT_TYPE_BIT_SHIFT
 #define CONNECT 1 << EXT_TYPE_BIT_SHIFT
+#define DATA    2 << EXT_TYPE_BIT_SHIFT
 
 // CONNECT SUBTYPE ENUMERATION
 #define REQUEST    0
 #define ACCEPT     1
 #define REFUSE     2
 #define ACCEPT_ACK 3
+
+// DATA SUBTYPE ENUMERATION
+#define DATA_PAYLOAD 0
+#define DATA_ACK     1
+
 
 typedef uint8_t sc_pkt_type_t;
 
@@ -59,8 +65,9 @@ void user_advertise_thread();
 void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 void set_advertise(int set);
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len);
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, uint8_t payload_len);
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC);
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len, const char *payload);
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type);
 void send_packet(stealthcom_L2_extension * ext);
 
 

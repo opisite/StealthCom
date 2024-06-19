@@ -1,7 +1,18 @@
 #ifndef PACKET_RX_TX_H
 #define PACKET_RX_TX_H
 
-#include "packet_queue.h"
+#include "thread_safe_queue.h"
+
+struct packet_wrapper {
+    void *buf;
+    int buf_len;
+
+    ~packet_wrapper() {
+        free(buf);
+    }
+};
+
+using PacketQueue = ThreadSafeQueue<std::unique_ptr<packet_wrapper>>;
 
 typedef struct {
     uint8_t it_version;

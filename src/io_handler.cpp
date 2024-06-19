@@ -7,15 +7,14 @@
 #include <mutex>
 #include <thread>
 
-#include "message_queue.h"
 #include "stealthcom_logic.h"
 #include "io_handler.h"
 
 #define INPUT_BUFFER_SIZE 256
 #define INITIAL_WINDOW_LINE 2
 
-static MessageQueue *main_queue;
-static MessageQueue *system_queue;
+static InputQueue *main_queue;
+static InputQueue *system_queue;
 
 static WINDOW *input_win;
 static WINDOW *system_win;
@@ -69,8 +68,8 @@ void ncurses_init() {
 
     nodelay(input_win, TRUE);
 
-    main_queue = new MessageQueue();
-    system_queue = new MessageQueue();
+    main_queue = new InputQueue();
+    system_queue = new InputQueue();
 }
 
 void io_clr_output() {

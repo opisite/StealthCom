@@ -6,9 +6,8 @@
 #include <atomic>
 
 #include "stealthcom_pkt_handler.h"
-#include "packet_rx_tx.h"
 #include "utils.h"
-#include "packet_queue.h"
+#include "thread_safe_queue.h"
 #include "user_data.h"
 #include "user_registry.h"
 #include "request_registry.h"
@@ -60,7 +59,7 @@ void send_packet(stealthcom_L2_extension * ext) {
     tx_queue->push(std::move(packet));
 }
 
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, uint8_t payload_len) {
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
     int user_ID_len = this_user_ID.length();
@@ -76,7 +75,7 @@ stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, uint8_t payload_len) 
     return ext;
 }
 
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len) {
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
     int user_ID_len = this_user_ID.length();
@@ -88,6 +87,23 @@ stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6
     strncpy(ext->user_ID, this_user_ID.c_str(), user_ID_len);
     ext->user_ID_len = user_ID_len;
     ext->payload_len = 0;
+
+    return ext;
+}
+
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len, const char *payload) {
+    const uint8_t *this_MAC = get_MAC();
+    std::string this_user_ID = get_user_ID();
+    int user_ID_len = this_user_ID.length();
+
+    struct stealthcom_L2_extension *ext = stealthcom_L2_extension::create(payload_len);
+    ext->type = type;
+    memcpy(ext->source_MAC, this_MAC, 6);
+    memcpy(ext->dest_MAC, dest_MAC.data(), 6);
+    strncpy(ext->user_ID, this_user_ID.c_str(), user_ID_len);
+    memcpy(ext->payload, payload, payload_len);
+    ext->user_ID_len = user_ID_len;
+    ext->payload_len = payload_len;
 
     return ext;
 }
@@ -148,6 +164,7 @@ void packet_handler_thread() {
 
         switch(type) {
             case BEACON: {
+                //system_push_msg("BEACON");
                 break;
             }
             case CONNECT: {
@@ -173,7 +190,7 @@ void set_advertise(int set) {
 }
 
 void user_advertise_thread() {
-    stealthcom_L2_extension *ext = generate_ext(BEACON, 0);
+    stealthcom_L2_extension *ext = generate_ext(BEACON);
 
     while(!advertise_stop_flag.load()) {
         send_packet(ext);

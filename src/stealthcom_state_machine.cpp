@@ -10,6 +10,7 @@
 #include "user_data.h"
 #include "stealthcom_pkt_handler.h"
 #include "stealthcom_connection_logic.h"
+#include "stealthcom_data_logic.h"
 #include "user_registry.h"
 #include "request_registry.h"
 #include "utils.h"
@@ -20,7 +21,6 @@
 
 std::atomic<bool> stop_flag;
 std::mutex running_mtx;
-std::mutex user_list_mtx;
 
 typedef void (*SettingFunction)(int);
 
@@ -105,6 +105,10 @@ static void show_users_thread() {
     std::lock_guard<std::mutex> lock(running_mtx);
     stop_flag.store(false);
     while(!stop_flag.load()) {
+        if(!user_registry->registry_update()) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            continue;
+        }
         users = user_registry->get_users();
         io_clr_output();
         main_push_msg("VISIBLE USERS");
@@ -117,6 +121,7 @@ static void show_users_thread() {
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+    user_registry->raise_update_flag();
     stop_flag.store(false);
 }
 
@@ -124,6 +129,10 @@ static void show_connection_requests_thread() {
     std::lock_guard<std::mutex> lock(running_mtx);
     stop_flag.store(false);
     while(!stop_flag.load()) {
+        if(!request_registry->registry_update()) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            continue;
+        }
         requests = request_registry->get_requests();
         io_clr_output();
         main_push_msg("CONNECTION REQUESTS");
@@ -136,6 +145,7 @@ static void show_connection_requests_thread() {
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+    request_registry->raise_update_flag();
     stop_flag.store(false);
 }
 
@@ -250,6 +260,10 @@ void StealthcomStateMachine::handle_input_menu(const std::string& input) {
     }
 }
 
+void StealthcomStateMachine::handle_input_msg(const std::string& input) {
+    send_message(input);
+}
+
 void StealthcomStateMachine::handle_input_show_users(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
@@ -342,6 +356,7 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
             break;
         }
         case CHAT: {
+            handle_input_msg(input);
             break;
         }
         case SHOW_USERS: {
