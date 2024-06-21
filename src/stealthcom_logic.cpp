@@ -16,12 +16,15 @@
 #include "stealthcom_state_machine.h"
 #include "user_registry.h"
 #include "request_registry.h"
+#include "data_registry.h"
+#include "stealthcom_data_logic.h"
 
 static InputQueue *input_queue;
 StealthcomStateMachine *state_machine;
 
 std::shared_ptr<UserRegistry> user_registry;
 std::shared_ptr<RequestRegistry> request_registry;
+std::shared_ptr<DataRegistry> data_registry;
 
 void stealthcom_init(const char *netif) {
     ncurses_init();
@@ -30,9 +33,11 @@ void stealthcom_init(const char *netif) {
     std::shared_ptr<PacketQueue> tx_queue = std::make_shared<PacketQueue>();
     user_registry = std::make_shared<UserRegistry>();
     request_registry = std::make_shared<RequestRegistry>();
+    data_registry = std::make_shared<DataRegistry>();
 
     packet_rx_tx_init(netif, rx_queue, tx_queue);
     stealthcom_pkt_handler_init(rx_queue, tx_queue);
+    data_logic_init();
 
     std::thread ncursesThread(ncurses_thread);
     ncursesThread.detach();

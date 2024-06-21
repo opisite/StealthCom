@@ -176,6 +176,9 @@ void packet_handler_thread() {
                 connect_pkt_queue->push(std::move(ext_wrapper));
                 break;
             }
+            case DATA: {
+                system_push_msg("Received Data");
+            }
         }
     }
 }

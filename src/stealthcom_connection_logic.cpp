@@ -11,11 +11,18 @@
 #include "request_registry.h"
 #include "io_handler.h"
 #include "utils.h"
+#include "stealthcom_data_logic.h"
 
 static std::shared_ptr<PacketQueue> connect_pkt_queue;
 
 void connection_worker_init(std::shared_ptr<PacketQueue> queue) {
     connect_pkt_queue = queue;
+}
+
+static void begin_connection(std::string& MAC) {
+    data_logic_init();
+    user_registry->notify_connect(MAC);
+    state_machine->set_connection_state(CONNECTED);
 }
 
 static void handle_stealthcom_conn_request(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
@@ -54,8 +61,7 @@ static void handle_stealthcom_conn_accept(struct stealthcom_L2_extension *ext, s
     }
 
     send_conn_accept_ack(user);
-    user_registry->notify_connect(MAC_str);
-    state_machine->set_connection_state(CONNECTED);
+    begin_connection(MAC_str);
     system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] accepted your connection request - you may now exchange messages");
 }
 
@@ -68,8 +74,7 @@ static void handle_stealthcom_conn_accept_ack(struct stealthcom_L2_extension *ex
     }
 
 
-    user_registry->notify_connect(MAC_str);
-    state_machine->set_connection_state(CONNECTED);
+    begin_connection(MAC_str);
     system_push_msg("Now connected to user [" + user_ID_str + "] with address [" + MAC_str + "] - you may now exchange messages");
 }
 

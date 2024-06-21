@@ -5,9 +5,13 @@
 #include <vector>
 #include <ctime>
 
+enum class MessageStatus : uint8_t {
+    NOT_DELIVERED,
+    DELIVERED,
+    FAILED,
+};
+
 struct Message {
-    bool delivered;
-    bool outbound;
     std::time_t timestamp;
     uint32_t sequence_num;
     uint8_t msg_len;
@@ -25,6 +29,16 @@ struct Message {
 
 };
 
-void send_message(const std::string& input);
+struct MessageWrapper {
+    MessageStatus status;
+    const Message *msg;
+};
+
+void data_logic_init();
+void data_logic_reset();
+void resend_message(uint32_t seq_number);
+void send_message(const Message *msg);
+void set_msg_status();
+void create_message(const std::string& input);
 
 #endif
