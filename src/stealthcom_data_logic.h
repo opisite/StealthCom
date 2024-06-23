@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 #include <ctime>
+#include "thread_safe_queue.h"
+#include "packet_rx_tx.h"
+#include "stealthcom_pkt_handler.h"
 
 enum class MessageStatus : uint8_t {
     NOT_DELIVERED,
@@ -34,10 +37,13 @@ struct MessageWrapper {
     const Message *msg;
 };
 
-void data_logic_init();
+using MessageQueue = ThreadSafeQueue<const Message*>;
+
+void data_worker_init(std::shared_ptr<PacketQueue> inbound_queue);
 void data_logic_reset();
 void resend_message(uint32_t seq_number);
 void send_message(const Message *msg);
+void handle_incoming_message(stealthcom_L2_extension *ext);
 void set_msg_status();
 void create_message(const std::string& input);
 

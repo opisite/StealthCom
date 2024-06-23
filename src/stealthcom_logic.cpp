@@ -37,7 +37,6 @@ void stealthcom_init(const char *netif) {
 
     packet_rx_tx_init(netif, rx_queue, tx_queue);
     stealthcom_pkt_handler_init(rx_queue, tx_queue);
-    data_logic_init();
 
     std::thread ncursesThread(ncurses_thread);
     ncursesThread.detach();

@@ -13,19 +13,25 @@
 #include "request_registry.h"
 #include "io_handler.h"
 #include "stealthcom_connection_logic.h"
+#include "stealthcom_data_logic.h"
 
 std::atomic<bool> advertise_stop_flag;
 
 static std::shared_ptr<PacketQueue> rx_queue;
 static std::shared_ptr<PacketQueue> tx_queue;
 static std::shared_ptr<PacketQueue> connect_pkt_queue;
+static std::shared_ptr<PacketQueue> data_pkt_queue;
 
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     rx_queue = rx;
     tx_queue = tx;
 
     connect_pkt_queue = std::make_shared<PacketQueue>();
+    data_pkt_queue = std::make_shared<PacketQueue>();
+
     connection_worker_init(connect_pkt_queue);
+    data_worker_init(data_pkt_queue);
+    
     std::thread connectWorkerThread(connection_worker_thread);
     connectWorkerThread.detach();
 
@@ -177,7 +183,13 @@ void packet_handler_thread() {
                 break;
             }
             case DATA: {
-                system_push_msg("Received Data");
+                stealthcom_L2_extension *ext_c = (stealthcom_L2_extension *)malloc(sizeof(stealthcom_L2_extension) - 1);
+                memcpy(ext_c, ext, sizeof(stealthcom_L2_extension) - 1);
+                std::unique_ptr<packet_wrapper> ext_wrapper = std::make_unique<packet_wrapper>();
+                ext_wrapper->buf_len = packet_len - sizeof(stealthcom_header);
+                ext_wrapper->buf = ext_c;
+                data_pkt_queue->push(std::move(ext_wrapper));
+                break;
             }
         }
     }

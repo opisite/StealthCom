@@ -17,7 +17,7 @@ public:
     int retries;
 
     DataRegistryEntry()
-        : ttl(DATA_REGISTRY_TTL), retries(MAX_RETRIES) {}
+        : ttl(DATA_REGISTRY_TTL), retries(0) {}
 };
 
 class DataRegistry : public Registry<DataRegistryEntry> {
@@ -36,6 +36,7 @@ public:
     void remove_entry(const uint32_t seq_num);
     bool registry_update();
     void raise_update_flag();
+    bool entry_exists(const uint32_t seq_num);
 };
 
 extern std::shared_ptr<DataRegistry> data_registry;

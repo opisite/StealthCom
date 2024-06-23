@@ -20,7 +20,6 @@ void connection_worker_init(std::shared_ptr<PacketQueue> queue) {
 }
 
 static void begin_connection(std::string& MAC) {
-    data_logic_init();
     user_registry->notify_connect(MAC);
     state_machine->set_connection_state(CONNECTED);
 }

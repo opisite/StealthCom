@@ -17,6 +17,16 @@ void DataRegistry::add_entry(const uint32_t seq_num) {
     registry_updated = true;
 }
 
+void DataRegistry::remove_entry(const uint32_t seq_num) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    auto it = registry.find(seq_num);
+    if(it != registry.end()) {
+        DataRegistryEntry* entry = it->second;
+        delete entry;
+        registry.erase(it);
+    }
+}
+
 void DataRegistry::decrement_ttl_and_remove_expired() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto it = registry.begin(); it != registry.end(); ) {
@@ -30,6 +40,7 @@ void DataRegistry::decrement_ttl_and_remove_expired() {
                 registry_updated = true;
             } else {
                 resend_message(seq_number);
+                entry->ttl = DATA_REGISTRY_TTL;
                 entry->retries++;
             }
         } else {
@@ -44,4 +55,10 @@ bool DataRegistry::registry_update() {
 
 void DataRegistry::raise_update_flag() {
     registry_updated = true;
+}
+
+bool DataRegistry::entry_exists(const uint32_t seq_num) {
+    std::lock_guard<std::mutex> lock(registryMutex);
+    auto it = registry.find(seq_num);
+    return it != registry.end();
 }
