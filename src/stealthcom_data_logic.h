@@ -4,11 +4,18 @@
 #include <string>
 #include <vector>
 #include <ctime>
+#include "thread_safe_queue.h"
+#include "packet_rx_tx.h"
+#include "stealthcom_pkt_handler.h"
+
+enum class MessageStatus : uint8_t {
+    NOT_DELIVERED,
+    DELIVERED,
+    FAILED,
+};
 
 struct Message {
-    bool delivered;
-    bool outbound;
-    std::time_t timestamp;
+    uint64_t timestamp;
     uint32_t sequence_num;
     uint8_t msg_len;
     char payload[1]; // Variable length of data
@@ -25,6 +32,19 @@ struct Message {
 
 };
 
-void send_message(const std::string& input);
+struct MessageWrapper {
+    MessageStatus status;
+    const Message *msg;
+};
+
+using MessageQueue = ThreadSafeQueue<const Message*>;
+
+void data_worker_init(std::shared_ptr<PacketQueue> inbound_queue);
+void data_logic_reset();
+void resend_message(uint32_t seq_number);
+void send_message(const Message *msg);
+void handle_incoming_message(stealthcom_L2_extension *ext);
+void set_msg_status();
+void create_message(const std::string& input);
 
 #endif

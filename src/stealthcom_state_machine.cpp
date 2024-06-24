@@ -32,6 +32,7 @@ static const struct {
     { "Settings", SETTINGS },
     { "Details", DETAILS },
     { "Connection Requests", CONNECTION_REQUESTS },
+    { "Chat", CHAT },
 };
 
 struct {
@@ -200,6 +201,10 @@ void StealthcomStateMachine::perform_state_action(State state) {
             print_menu_items();
             break;
         }
+        case CHAT: {
+            main_push_msg("CHAT\n");
+            break;
+        }
         case DETAILS: {
             print_user_details();
             break;
@@ -261,7 +266,15 @@ void StealthcomStateMachine::handle_input_menu(const std::string& input) {
 }
 
 void StealthcomStateMachine::handle_input_msg(const std::string& input) {
-    send_message(input);
+    if(input == "..") {
+        set_state(MENU);
+    }
+    
+    if(connection_context.connection_state != CONNECTED) {
+        system_push_msg("Message send failed - not connected");
+        return;
+    }
+    create_message(input);
 }
 
 void StealthcomStateMachine::handle_input_show_users(const std::string& input) {

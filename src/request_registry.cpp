@@ -69,6 +69,7 @@ std::vector<StealthcomUser*> RequestRegistry::get_requests() {
 }
 
 bool RequestRegistry::has_active_request(const std::string& MAC) {
+    std::lock_guard<std::mutex> lock(registryMutex);
     auto it = registry.find(MAC);
     return it != registry.end();
 }

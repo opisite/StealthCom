@@ -13,19 +13,25 @@
 #include "request_registry.h"
 #include "io_handler.h"
 #include "stealthcom_connection_logic.h"
+#include "stealthcom_data_logic.h"
 
 std::atomic<bool> advertise_stop_flag;
 
 static std::shared_ptr<PacketQueue> rx_queue;
 static std::shared_ptr<PacketQueue> tx_queue;
 static std::shared_ptr<PacketQueue> connect_pkt_queue;
+static std::shared_ptr<PacketQueue> data_pkt_queue;
 
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     rx_queue = rx;
     tx_queue = tx;
 
     connect_pkt_queue = std::make_shared<PacketQueue>();
+    data_pkt_queue = std::make_shared<PacketQueue>();
+
     connection_worker_init(connect_pkt_queue);
+    data_worker_init(data_pkt_queue);
+    
     std::thread connectWorkerThread(connection_worker_thread);
     connectWorkerThread.detach();
 
@@ -54,7 +60,7 @@ void send_packet(stealthcom_L2_extension * ext) {
     std::unique_ptr<packet_wrapper> packet = std::make_unique<packet_wrapper>();
 
     packet->buf = hdr;
-    packet->buf_len = sizeof(stealthcom_header) + sizeof(stealthcom_L2_extension) + ext->payload_len;
+    packet->buf_len = sizeof(stealthcom_header) + ext_len;
 
     tx_queue->push(std::move(packet));
 }
@@ -174,6 +180,16 @@ void packet_handler_thread() {
                 ext_wrapper->buf_len = packet_len - sizeof(stealthcom_header);
                 ext_wrapper->buf = ext_c;
                 connect_pkt_queue->push(std::move(ext_wrapper));
+                break;
+            }
+            case DATA: {
+                int ext_size = (sizeof(stealthcom_L2_extension) - 1) + ext->payload_len;
+                stealthcom_L2_extension *ext_c = (stealthcom_L2_extension *)malloc(ext_size);
+                memcpy(ext_c, ext, ext_size);
+                std::unique_ptr<packet_wrapper> ext_wrapper = std::make_unique<packet_wrapper>();
+                ext_wrapper->buf_len = packet_len - sizeof(stealthcom_header);
+                ext_wrapper->buf = ext_c;
+                data_pkt_queue->push(std::move(ext_wrapper));
                 break;
             }
         }
