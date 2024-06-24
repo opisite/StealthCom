@@ -47,7 +47,7 @@ struct __attribute__((packed)) stealthcom_L2_extension {
     }
 
 
-    stealthcom_L2_extension(uint8_t payload_size) : payload_len(payload_len) {}
+    stealthcom_L2_extension(uint8_t payload_size) : payload_len(payload_size) {}
 };
 
 struct __attribute__((packed)) stealthcom_header {

@@ -15,7 +15,7 @@ enum class MessageStatus : uint8_t {
 };
 
 struct Message {
-    std::time_t timestamp;
+    uint64_t timestamp;
     uint32_t sequence_num;
     uint8_t msg_len;
     char payload[1]; // Variable length of data

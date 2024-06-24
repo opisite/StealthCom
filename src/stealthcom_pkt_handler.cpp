@@ -60,7 +60,7 @@ void send_packet(stealthcom_L2_extension * ext) {
     std::unique_ptr<packet_wrapper> packet = std::make_unique<packet_wrapper>();
 
     packet->buf = hdr;
-    packet->buf_len = sizeof(stealthcom_header) + sizeof(stealthcom_L2_extension) + ext->payload_len;
+    packet->buf_len = sizeof(stealthcom_header) + ext_len;
 
     tx_queue->push(std::move(packet));
 }
@@ -183,8 +183,9 @@ void packet_handler_thread() {
                 break;
             }
             case DATA: {
-                stealthcom_L2_extension *ext_c = (stealthcom_L2_extension *)malloc(sizeof(stealthcom_L2_extension) - 1);
-                memcpy(ext_c, ext, sizeof(stealthcom_L2_extension) - 1);
+                int ext_size = (sizeof(stealthcom_L2_extension) - 1) + ext->payload_len;
+                stealthcom_L2_extension *ext_c = (stealthcom_L2_extension *)malloc(ext_size);
+                memcpy(ext_c, ext, ext_size);
                 std::unique_ptr<packet_wrapper> ext_wrapper = std::make_unique<packet_wrapper>();
                 ext_wrapper->buf_len = packet_len - sizeof(stealthcom_header);
                 ext_wrapper->buf = ext_c;
