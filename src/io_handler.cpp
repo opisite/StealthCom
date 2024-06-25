@@ -11,7 +11,7 @@
 #include "io_handler.h"
 
 #define INPUT_BUFFER_SIZE 256
-#define INITIAL_WINDOW_LINE 2
+#define INITIAL_WINDOW_LINE 1
 
 static InputQueue *main_queue;
 static InputQueue *system_queue;
@@ -21,6 +21,8 @@ static WINDOW *system_win;
 static WINDOW *main_win;
 static WINDOW *system_win_buffer;
 static WINDOW *main_win_buffer;
+static WINDOW *main_win_sub;
+static WINDOW *system_win_sub;
 static char *input;
 
 static std::mutex mtx;
@@ -58,10 +60,16 @@ void ncurses_init() {
     main_win_buffer = newwin(rows / 2, cols, 0, 0);
     system_win_buffer = newwin(rows / 2, cols, rows / 2, 0);
 
+    // Create sub-windows inside the buffer windows for content
+    main_win_sub = derwin(main_win_buffer, rows / 2 - 2, cols - 2, 1, 1);
+    system_win_sub = derwin(system_win_buffer, rows / 2 - 2, cols - 2, 1, 1);
+
     draw_main_window();
     draw_sys_window();
 
-    scrollok(main_win_buffer, TRUE);
+    // Enable scrolling for sub-windows
+    scrollok(main_win_sub, TRUE);
+    scrollok(system_win_sub, TRUE);
 
     input = new char[INPUT_BUFFER_SIZE];
     memset(input, 0, INPUT_BUFFER_SIZE);
@@ -75,7 +83,7 @@ void ncurses_init() {
 void io_clr_output() {
     std::lock_guard<std::mutex> lock(mtx);
     main_win_line = INITIAL_WINDOW_LINE;
-    werase(main_win_buffer);
+    werase(main_win_sub);
     draw_main_window();
 }
 
@@ -128,7 +136,12 @@ void ncurses_thread() {
             std::string msg = main_queue->pop();
             {
                 std::lock_guard<std::mutex> lock(mtx);
-                mvwprintw(main_win_buffer, main_win_line++, 2, "%s\n", msg.c_str());
+                if (main_win_line >= getmaxy(main_win_sub)) {
+                    wscrl(main_win_sub, 1);
+                    main_win_line = getmaxy(main_win_sub) - 1;
+                }
+                mvwprintw(main_win_sub, main_win_line++, 0, "%s", msg.c_str());
+                wrefresh(main_win_sub);
                 wrefresh(main_win_buffer);
             }
         }
@@ -137,7 +150,12 @@ void ncurses_thread() {
             std::string msg = system_queue->pop();
             {
                 std::lock_guard<std::mutex> lock(mtx);
-                mvwprintw(system_win_buffer, system_win_line++, 2, "%s\n", msg.c_str());
+                if (system_win_line >= getmaxy(system_win_sub)) {
+                    wscrl(system_win_sub, 1);
+                    system_win_line = getmaxy(system_win_sub) - 1;
+                }
+                mvwprintw(system_win_sub, system_win_line++, 0, "%s", msg.c_str());
+                wrefresh(system_win_sub);
                 wrefresh(system_win_buffer);
             }
         }
@@ -152,5 +170,7 @@ void ncurses_thread() {
     delwin(system_win);
     delwin(main_win_buffer);
     delwin(system_win_buffer);
+    delwin(main_win_sub);
+    delwin(system_win_sub);
     endwin();
 }
