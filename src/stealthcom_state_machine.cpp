@@ -269,12 +269,14 @@ void StealthcomStateMachine::handle_input_menu(const std::string& input) {
 void StealthcomStateMachine::handle_input_msg(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
+        return;
     }
     
     if(connection_context.connection_state != CONNECTED) {
         system_push_msg("Message send failed - not connected");
         return;
     }
+
     create_message(input);
 }
 
