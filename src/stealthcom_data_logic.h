@@ -8,6 +8,8 @@
 #include "packet_rx_tx.h"
 #include "stealthcom_pkt_handler.h"
 
+typedef uint32_t sequence_num_t;
+
 enum class MessageStatus : uint8_t {
     NOT_DELIVERED,
     DELIVERED,
@@ -16,7 +18,7 @@ enum class MessageStatus : uint8_t {
 
 struct Message {
     uint64_t timestamp;
-    uint32_t sequence_num;
+    sequence_num_t sequence_num;
     uint8_t msg_len;
     char payload[1]; // Variable length of data
 
@@ -41,10 +43,12 @@ using MessageQueue = ThreadSafeQueue<const Message*>;
 
 void data_worker_init(std::shared_ptr<PacketQueue> inbound_queue);
 void data_logic_reset();
-void resend_message(uint32_t seq_number);
+void resend_message(sequence_num_t seq_number);
 void send_message(const Message *msg);
 void handle_incoming_message(stealthcom_L2_extension *ext);
 void set_msg_status();
 void create_message(const std::string& input);
+void notify_send_fail(sequence_num_t seq_num);
+void display_messages();
 
 #endif

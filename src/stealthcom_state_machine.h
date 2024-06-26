@@ -44,6 +44,7 @@ class StealthcomStateMachine {
         void set_connection_state(ConnectionState state);
         void set_connection_state_and_user(ConnectionState state, StealthcomUser *user);
         void reset_connection_context();
+        State get_state();
         
     private:
         void set_state(State state);

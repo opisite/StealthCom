@@ -13,6 +13,7 @@
 #include "stealthcom_data_logic.h"
 #include "user_registry.h"
 #include "request_registry.h"
+#include "data_registry.h"
 #include "utils.h"
 
 #define Y 1
@@ -202,7 +203,7 @@ void StealthcomStateMachine::perform_state_action(State state) {
             break;
         }
         case CHAT: {
-            main_push_msg("CHAT\n");
+            display_messages();
             break;
         }
         case DETAILS: {
@@ -390,6 +391,10 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
         }
 
     }
+}
+
+State StealthcomStateMachine::get_state() {
+    return state;
 }
 
 ConnectionContext StealthcomStateMachine::get_connection_context() {
