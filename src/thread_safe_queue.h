@@ -30,6 +30,13 @@ public:
         return queue.empty();
     }
 
+    void clear() {
+        std::lock_guard<std::mutex> lock(mtx);
+        while (!queue.empty()) {
+            queue.pop();
+        }
+    }
+
 
 private:
     std::queue<T> queue;

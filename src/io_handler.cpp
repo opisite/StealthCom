@@ -82,6 +82,7 @@ void ncurses_init() {
 
 void io_clr_output() {
     std::lock_guard<std::mutex> lock(mtx);
+    main_queue->clear();
     main_win_line = INITIAL_WINDOW_LINE;
     werase(main_win_sub);
     draw_main_window();
