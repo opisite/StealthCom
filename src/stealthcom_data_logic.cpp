@@ -155,11 +155,28 @@ void notify_send_fail(sequence_num_t seq_num) {
 }
 
 static void print_inbound_msg(const Message *msg) {
-    main_push_msg("Inbound: " + std::string(msg->payload));
+    StealthcomUser *user = state_machine->get_connection_context().user;
+    main_push_msg(user->getName() + ": " + std::string(msg->payload));
 }
 
-static void print_outbound_msg(const Message *msg) {
-    main_push_msg("Oubound: " + std::string(msg->payload));
+static void print_outbound_msg(const MessageWrapper msg) {
+    std::string status_str;
+    switch (msg.status) {
+        case MessageStatus::NOT_DELIVERED: {
+            status_str = "[N]";
+            break;
+        }
+        case MessageStatus::DELIVERED: {
+            status_str = "[D]";
+            break;
+        }
+        case MessageStatus::FAILED: {
+            status_str = "[F]";
+            break;
+        }
+    }
+
+    main_push_msg(status_str + " - " + std::string(msg.msg->payload));
 }
 
 
@@ -180,14 +197,14 @@ void display_messages() {
                 print_inbound_msg(inbound_messages[inbound_index]);
                 inbound_index++;
             } else {
-                print_outbound_msg(outbound_messages[outbound_index].msg);
+                print_outbound_msg(outbound_messages[outbound_index]);
                 outbound_index++;
             }
         } else if(inbound_index < inbound_messages.size()) {
             print_inbound_msg(inbound_messages[inbound_index]);
             inbound_index++;
         } else if(outbound_index < outbound_messages.size()) {
-            print_outbound_msg(outbound_messages[outbound_index].msg);
+            print_outbound_msg(outbound_messages[outbound_index]);
             outbound_index++;
         } else {
             break;
