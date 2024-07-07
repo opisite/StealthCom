@@ -137,3 +137,12 @@ void send_conn_request_response(StealthcomUser *user, bool accept) {
     send_packet(ext);
     request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
 }
+
+void send_disconnect() {
+    StealthcomUser *user = state_machine->get_connection_context().user;
+    std::array<uint8_t, 6> MAC = user->getMAC();
+
+    stealthcom_L2_extension *ext = generate_ext(CONNECT | DISCONNECT, MAC);
+
+    send_packet(ext);
+}

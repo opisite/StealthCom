@@ -270,6 +270,13 @@ void StealthcomStateMachine::handle_input_msg(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
         return;
+    } else if(input == "/disconnect") {
+        if(connection_context.connection_state != CONNECTED) {
+            return;
+        }
+        system_push_msg("Disconnecting from user: " + connection_context.user->getName());
+        reset_connection_context();
+        return;
     }
     
     if(connection_context.connection_state != CONNECTED) {
