@@ -275,6 +275,7 @@ void StealthcomStateMachine::handle_input_msg(const std::string& input) {
             return;
         }
         system_push_msg("Disconnecting from user: " + connection_context.user->getName());
+        send_disconnect();
         reset_connection_context();
         return;
     }

@@ -1,6 +1,7 @@
 #include "request_registry.h"
 #include "user_registry.h"
 #include "stealthcom_state_machine.h"
+#include "io_handler.h"
 #include "utils.h"
 
 #define TIME_TO_LIVE 30
@@ -53,6 +54,8 @@ void RequestRegistry::add_or_update_entry(const uint8_t* MAC, bool direction) {
     } else {
         registry[MAC_str] = new RequestRegistryEntry(user, TIME_TO_LIVE, direction);
         registry_updated = true;
+        std::string user_str = user_registry->get_user(MAC_str)->getName();
+        system_push_msg("Connection request received from user [" + user_str + "] with address [" + MAC_str + "]");
     }
 }
 

@@ -26,14 +26,13 @@ static void begin_connection(std::string& MAC) {
 
 static void handle_stealthcom_conn_request(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
     request_registry->add_or_update_entry(&ext->source_MAC[0], INBOUND);
-
-    system_push_msg("Connection request received from user [" + user_ID_str + "] with address [" + mac_addr_to_str(&ext->source_MAC[0]) + "]");
 }
 
 static void handle_stealthcom_conn_refuse(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
+    ConnectionContext context = state_machine->get_connection_context();
     std::string MAC_str = mac_addr_to_str(&ext->source_MAC[0]);
     StealthcomUser *user = user_registry->get_user(MAC_str);
-    ConnectionContext context = state_machine->get_connection_context();
+
     if(context.user != user || context.connection_state != AWAITING_CONNECTION_RESPONSE) {
         return;
     }
@@ -72,9 +71,16 @@ static void handle_stealthcom_conn_accept_ack(struct stealthcom_L2_extension *ex
         return;
     }
 
-
     begin_connection(MAC_str);
     system_push_msg("Now connected to user [" + user_ID_str + "] with address [" + MAC_str + "] - you may now exchange messages");
+}
+
+static void handle_stealthcom_disconnect(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
+    if(state_machine->get_connection_context().connection_state != CONNECTED) {
+        return;
+    }
+    system_push_msg(user_ID_str + " disconnected");
+    state_machine->reset_connection_context();
 }
 
 void connection_worker_thread() {
@@ -107,6 +113,9 @@ void connection_worker_thread() {
                 handle_stealthcom_conn_accept_ack(ext, user_ID_str);
                 break;
             }
+            case DISCONNECT: {
+
+            }
         }
     }
 }
@@ -117,7 +126,10 @@ void send_conn_request(StealthcomUser *user) {
 
     stealthcom_L2_extension *ext = generate_ext(CONNECT | REQUEST, MAC);
 
-    send_packet(ext);
+    for(int x = 0; x < 3; x++) {
+        send_packet(ext);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
     request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
 
     state_machine->set_connection_state_and_user(AWAITING_CONNECTION_RESPONSE, user);
@@ -134,7 +146,10 @@ void send_conn_request_response(StealthcomUser *user, bool accept) {
         ext = generate_ext(CONNECT | REFUSE, MAC);
     }
 
-    send_packet(ext);
+    for(int x = 0; x < 3; x++) {
+        send_packet(ext);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
     request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
 }
 
@@ -144,5 +159,8 @@ void send_disconnect() {
 
     stealthcom_L2_extension *ext = generate_ext(CONNECT | DISCONNECT, MAC);
 
-    send_packet(ext);
+    for(int x = 0; x < 3; x++) {
+        send_packet(ext);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
 }
