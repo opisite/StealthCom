@@ -422,9 +422,7 @@ void StealthcomStateMachine::set_connection_state_and_user(ConnectionState state
 
 void StealthcomStateMachine::reset_connection_context() {
     StealthcomUser *user = connection_context.user;
-    if(connection_context.connection_state == CONNECTED) {
-        system_push_msg("Connection to user [" + user->getName() + "] timed out");
-    } else if(connection_context.connection_state == AWAITING_CONNECTION_RESPONSE) {
+    if(connection_context.connection_state == AWAITING_CONNECTION_RESPONSE) {
         system_push_msg("Request to user [" + user->getName() + "] timed out");
     }
 

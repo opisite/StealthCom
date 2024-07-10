@@ -114,7 +114,8 @@ void connection_worker_thread() {
                 break;
             }
             case DISCONNECT: {
-
+                handle_stealthcom_disconnect(ext, user_ID_str);
+                break;
             }
         }
     }
