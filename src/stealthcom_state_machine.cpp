@@ -270,6 +270,14 @@ void StealthcomStateMachine::handle_input_msg(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
         return;
+    } else if(input == "/disconnect") {
+        if(connection_context.connection_state != CONNECTED) {
+            return;
+        }
+        system_push_msg("Disconnecting from user: " + connection_context.user->getName());
+        send_disconnect();
+        reset_connection_context();
+        return;
     }
     
     if(connection_context.connection_state != CONNECTED) {
@@ -414,9 +422,7 @@ void StealthcomStateMachine::set_connection_state_and_user(ConnectionState state
 
 void StealthcomStateMachine::reset_connection_context() {
     StealthcomUser *user = connection_context.user;
-    if(connection_context.connection_state == CONNECTED) {
-        system_push_msg("Connection to user [" + user->getName() + "] timed out");
-    } else if(connection_context.connection_state == AWAITING_CONNECTION_RESPONSE) {
+    if(connection_context.connection_state == AWAITING_CONNECTION_RESPONSE) {
         system_push_msg("Request to user [" + user->getName() + "] timed out");
     }
 

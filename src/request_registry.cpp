@@ -1,6 +1,7 @@
 #include "request_registry.h"
 #include "user_registry.h"
 #include "stealthcom_state_machine.h"
+#include "io_handler.h"
 #include "utils.h"
 
 #define TIME_TO_LIVE 30
@@ -22,6 +23,7 @@ void RequestRegistry::decrement_ttl_and_remove_expired() {
         if (--entry->ttl <= 0) {
             if(entry->direction == OUTBOUND && state_machine->get_connection_context().connection_state == AWAITING_CONNECTION_RESPONSE) {
                 state_machine->reset_connection_context();
+                system_push_msg("Connection to user [" + entry->user->getName() + "] timed out");
             }
             delete entry;
             it = registry.erase(it);
@@ -53,6 +55,10 @@ void RequestRegistry::add_or_update_entry(const uint8_t* MAC, bool direction) {
     } else {
         registry[MAC_str] = new RequestRegistryEntry(user, TIME_TO_LIVE, direction);
         registry_updated = true;
+        std::string user_str = user_registry->get_user(MAC_str)->getName();
+        if(direction == INBOUND) {
+            system_push_msg("Connection request received from user [" + user_str + "] with address [" + MAC_str + "]");
+        }
     }
 }
 

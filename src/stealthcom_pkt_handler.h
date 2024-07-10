@@ -21,6 +21,7 @@
 #define ACCEPT     1
 #define REFUSE     2
 #define ACCEPT_ACK 3
+#define DISCONNECT 4
 
 // DATA SUBTYPE ENUMERATION
 #define DATA_PAYLOAD 0
