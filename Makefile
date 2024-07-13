@@ -2,7 +2,7 @@ CC=g++
 
 CFLAGS=-Wall -g
 
-LIBS=-lpthread -lpcap -lncursesw
+LIBS=-lpthread -lpcap -lncursesw -lssl -lcrypto
 
 SRCS=$(wildcard src/*.cpp)
 
