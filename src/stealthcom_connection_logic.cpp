@@ -12,6 +12,7 @@
 #include "io_handler.h"
 #include "utils.h"
 #include "stealthcom_data_logic.h"
+#include "crypto.h"
 
 static std::shared_ptr<PacketQueue> connect_pkt_queue;
 
@@ -19,8 +20,8 @@ void connection_worker_init(std::shared_ptr<PacketQueue> queue) {
     connect_pkt_queue = queue;
 }
 
-static void begin_connection(std::string& MAC) {
-    user_registry->notify_connect(MAC);
+void begin_connection(StealthcomUser *user) {
+    user_registry->notify_connect(user);
     state_machine->set_connection_state(CONNECTED);
 }
 
@@ -46,9 +47,11 @@ static void send_conn_accept_ack(StealthcomUser *user) {
 
     stealthcom_L2_extension *ext = generate_ext(CONNECT | ACCEPT_ACK, MAC);
 
-    send_packet(ext);
+    for(int x = 0; x < 3; x++) {
+        send_packet(ext);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
 }
-
 
 static void handle_stealthcom_conn_accept(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
     std::string MAC_str = mac_addr_to_str(&ext->source_MAC[0]);
@@ -58,9 +61,14 @@ static void handle_stealthcom_conn_accept(struct stealthcom_L2_extension *ext, s
         return;
     }
 
+    system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] accepted your connection request - beginning key exchange");
+
+    std::thread keyExchangeThread(key_exchange_thread, user, false);
+    keyExchangeThread.detach();
+
     send_conn_accept_ack(user);
-    begin_connection(MAC_str);
-    system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] accepted your connection request - you may now exchange messages");
+   
+    
 }
 
 static void handle_stealthcom_conn_accept_ack(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
@@ -71,8 +79,12 @@ static void handle_stealthcom_conn_accept_ack(struct stealthcom_L2_extension *ex
         return;
     }
 
-    begin_connection(MAC_str);
-    system_push_msg("Now connected to user [" + user_ID_str + "] with address [" + MAC_str + "] - you may now exchange messages");
+    system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] acknowledged your accept - beginning key exchange");
+
+    std::thread keyExchangeThread(key_exchange_thread, user, true);
+    keyExchangeThread.detach();
+
+    
 }
 
 static void handle_stealthcom_disconnect(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {

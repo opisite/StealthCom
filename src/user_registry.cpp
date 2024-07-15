@@ -75,8 +75,9 @@ StealthcomUser * UserRegistry::get_user(std::string& MAC) {
     }
 }
 
-void UserRegistry::notify_connect(std::string& MAC) {
-    auto it = registry.find(MAC);
+void UserRegistry::notify_connect(StealthcomUser *user) {
+    std::string MAC_str = mac_addr_to_str(user->getMAC().data());
+    auto it = registry.find(MAC_str);
     if (it != registry.end()) {
         UserRegistryEntry* entry = it->second;
         entry->ttl = CONNECTED_TIME_TO_LIVE;

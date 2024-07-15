@@ -12,21 +12,27 @@
 #define EXT_SUBTYPE_BITMASK 0x0F
 
 // TYPE ENUMERATION
-#define BEACON  0 << EXT_TYPE_BIT_SHIFT
-#define CONNECT 1 << EXT_TYPE_BIT_SHIFT
-#define DATA    2 << EXT_TYPE_BIT_SHIFT
+#define BEACON          0 << EXT_TYPE_BIT_SHIFT
+#define CONNECT         1 << EXT_TYPE_BIT_SHIFT
+#define DATA            2 << EXT_TYPE_BIT_SHIFT
+#define KEY_EX          3 << EXT_TYPE_BIT_SHIFT
 
 // CONNECT SUBTYPE ENUMERATION
-#define REQUEST    0
-#define ACCEPT     1
-#define REFUSE     2
-#define ACCEPT_ACK 3
-#define DISCONNECT 4
+#define REQUEST         0
+#define ACCEPT          1
+#define REFUSE          2
+#define ACCEPT_ACK      3
+#define DISCONNECT      4
 
 // DATA SUBTYPE ENUMERATION
-#define DATA_PAYLOAD 0
-#define DATA_ACK     1
+#define DATA_PAYLOAD    0
+#define DATA_ACK        1
 
+// KEY EXCHANGE SUBTYPE ENUMERATION
+#define DH_PARAMS       0
+#define DH_PARAMS_ACK   1
+#define PUB_KEY         2
+#define PUB_KEY_ACK     3
 
 typedef uint8_t sc_pkt_type_t;
 
