@@ -73,7 +73,7 @@ void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 void set_advertise(int set);
 stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC);
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len, const char *payload);
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint16_t payload_len, const char *payload);
 stealthcom_L2_extension * generate_ext(sc_pkt_type_t type);
 void send_packet(stealthcom_L2_extension * ext);
 
