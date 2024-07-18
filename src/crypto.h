@@ -5,9 +5,10 @@
 #include <vector>
 #include <openssl/dh.h>
 #include "stealthcom_user.h"
+#include "stealthcom_pkt_handler.h"
 
 void key_exchange_thread(StealthcomUser *user, bool initiatior);
-
+void key_exchange_packet_handler(stealthcom_L2_extension *ext);
 void generate_dh_key_pair();
 std::string encrypt_message(const std::string& message, const std::vector<unsigned char>& key);
 std::string decrypt_message(const std::string& message, const std::vector<unsigned char>& key);

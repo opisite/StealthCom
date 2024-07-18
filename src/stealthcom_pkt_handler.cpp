@@ -14,6 +14,7 @@
 #include "io_handler.h"
 #include "stealthcom_connection_logic.h"
 #include "stealthcom_data_logic.h"
+#include "crypto.h"
 
 std::atomic<bool> advertise_stop_flag;
 
@@ -191,6 +192,9 @@ void packet_handler_thread() {
                 ext_wrapper->buf = ext_c;
                 data_pkt_queue->push(std::move(ext_wrapper));
                 break;
+            }
+            case KEY_EX: {
+                key_exchange_packet_handler(ext);
             }
         }
     }

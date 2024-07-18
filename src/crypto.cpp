@@ -9,16 +9,14 @@
 #include "io_handler.h"
 #include "stealthcom_connection_logic.h"
 #include "stealthcom_state_machine.h"
-#include "stealthcom_pkt_handler.h"
 #include "user_registry.h"
 
 #define PARAM_LEN_BITS   2048
-#define PARAM_LEN_BYTES  (PARAM_LEN_BITS / 8)
+#define PARAM_LEN_BYTES  ((PARAM_LEN_BITS + 7) / 8)
 
 typedef struct {
     StealthcomUser *user;
     std::atomic<bool> key_exchange_stop_flag;
-    std::atomic<bool> have_local_dh_params;
     std::atomic<bool> have_peer_pub_key;
     std::atomic<bool> dh_params_delivered;
 } ex_status;
@@ -32,9 +30,15 @@ typedef struct {
 } dh_params;
 
 struct dh_params_payload {
+    int item_len_bits;
     unsigned char pub_key[PARAM_LEN_BYTES];
     unsigned char p[PARAM_LEN_BYTES];
     unsigned char g[PARAM_LEN_BYTES];
+};
+
+struct pub_key_payload {
+    int key_len_bits;
+    unsigned char pub_key[PARAM_LEN_BYTES];
 };
 
 static ex_status *status;
@@ -43,7 +47,6 @@ static dh_params *params;
 static void status_init(StealthcomUser *user) {
     status->user = user;
     status->key_exchange_stop_flag.store(false);
-    status->have_local_dh_params.store(false);
     status->have_peer_pub_key.store(false);
     status->dh_params_delivered.store(false);
 }
@@ -61,16 +64,72 @@ static void populate_payload(dh_params_payload *payload) {
         return;
     }
 
+    payload->item_len_bits = PARAM_LEN_BITS;
     std::copy(params->pub_key_byte_vector.begin(), params->pub_key_byte_vector.end(), payload->pub_key);
     std::copy(params->p_byte_vector.begin(), params->p_byte_vector.end(), payload->p);
     std::copy(params->g_byte_vector.begin(), params->g_byte_vector.end(), payload->g);
 }
 
-static void receive_dh_params() {
+static void populate_payload(pub_key_payload *payload) {
+    if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES) {
+        system_push_msg("Error: Vector size does not match PARAM_LEN_BYTES");
+        return;
+    }
+
+    payload->key_len_bits = PARAM_LEN_BITS;
+    std::copy(params->pub_key_byte_vector.begin(), params->pub_key_byte_vector.end(), payload->pub_key);
+}
+
+static void generate_private_key() {
 
 }
 
-static bool initiate_dh() {
+static void save_dh_params(stealthcom_L2_extension *ext) {
+    dh_params_payload *incoming_params = (dh_params_payload *)&ext->payload;
+
+    if(incoming_params->item_len_bits != PARAM_LEN_BITS) {
+        system_push_msg("Key exchange error: length of incoming DH parameters do not match local");
+    }
+
+    std::vector<unsigned char> p_byte_vector(PARAM_LEN_BYTES);
+    std::vector<unsigned char> g_byte_vector(PARAM_LEN_BYTES);
+    std::vector<unsigned char> peer_pub_key_byte_vector(PARAM_LEN_BYTES);
+
+    std::copy(incoming_params->p, incoming_params->p + PARAM_LEN_BYTES, p_byte_vector.begin());
+    std::copy(incoming_params->g, incoming_params->g + PARAM_LEN_BYTES, g_byte_vector.begin());
+    std::copy(incoming_params->pub_key, incoming_params->pub_key + PARAM_LEN_BYTES, peer_pub_key_byte_vector.begin());
+
+    params->p_byte_vector = p_byte_vector;
+    params->g_byte_vector = g_byte_vector;
+    params->peer_pub_key_byte_vector = peer_pub_key_byte_vector;
+
+    generate_private_key();
+}
+
+static void deliver_pub_key() {
+    while(!status->dh_params_delivered.load()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+}
+
+static void dh_responder() {
+    while(!status->have_peer_pub_key.load() && !status->key_exchange_stop_flag.load()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    if(status->have_peer_pub_key.load()) {
+
+        deliver_pub_key();
+    }
+}
+
+static inline void wait_for_pub_key() {
+    while(!status->have_peer_pub_key.load() && !status->key_exchange_stop_flag.load()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+}
+
+static bool dh_initiator() {
     generate_dh_key_pair();
 
     dh_params_payload payload;
@@ -87,10 +146,12 @@ static bool initiate_dh() {
         send_packet(ext);
     }
 
+    wait_for_pub_key();
+
     free(ext);
 }
 
-void key_exchange_thread(StealthcomUser *user, bool initiatior) {
+void key_exchange_thread(StealthcomUser *user, bool initiator) {
     user_registry->protect_users();
     state_machine->set_connection_state(KEY_EXCHANGE);
 
@@ -103,28 +164,36 @@ void key_exchange_thread(StealthcomUser *user, bool initiatior) {
 
     status->key_exchange_stop_flag.store(false);
 
-    std::pair<std::vector<unsigned char>, std::vector<unsigned char>> key_pair;
-
-    if(initiatior) {
-        initiate_dh();
+    if(initiator) {
+        dh_initiator();
     } else {
-        receive_dh_params();
-    }
-
-
-    std::vector<unsigned char> this_pub_key = key_pair.first;
-    std::vector<unsigned char> priv_key = key_pair.second;
-    std::vector<unsigned char> peer_pub_key;
-    bool pub_key_received = false;
-
-    while(true) {
-        if(status->key_exchange_stop_flag.load()) {
-            system_push_msg("Key exchange terminated");
-            break;
-        }
+        dh_responder();
     }
 
     user_registry->unprotect_users();
+}
+
+void key_exchange_packet_handler(stealthcom_L2_extension *ext) {
+    uint8_t subtype = (uint8_t)ext->type & EXT_SUBTYPE_BITMASK;
+
+    switch(subtype) {
+        case DH_PARAMS: {
+            save_dh_params(ext);
+            status->have_peer_pub_key.store(true);
+            break;
+        }
+        case DH_PARAMS_ACK: {
+            status->dh_params_delivered.store(true);
+            break;
+        }
+        case PUB_KEY: {
+            break;
+        }
+        case PUB_KEY_ACK: {
+            status->dh_params_delivered.store(true);
+            break;
+        }
+    }
 }
 
 void generate_dh_key_pair() {
@@ -173,8 +242,6 @@ void generate_dh_key_pair() {
     std::vector<unsigned char> private_key(BN_num_bytes(priv_key));
     BN_bn2bin(priv_key, private_key.data());
     params->priv_key_byte_vector = private_key;
-
-    status->have_local_dh_params.store(true);
 
     DH_free(dh);
 }
