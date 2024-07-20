@@ -114,7 +114,7 @@ void resend_message(sequence_num_t seq_number) {
 void send_message(const Message *msg) {
     ConnectionContext context = state_machine->get_connection_context();
     StealthcomUser *user = context.user;
-    uint8_t msg_size = (sizeof(Message) - 1) + msg->msg_len;
+    uint16_t msg_size = (sizeof(Message) - 1) + msg->msg_len;
 
     stealthcom_L2_extension *ext = generate_ext(DATA | DATA_PAYLOAD, user->getMAC(), msg_size, (const char *)msg);
     send_packet(ext);

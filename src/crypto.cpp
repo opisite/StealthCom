@@ -16,6 +16,7 @@
 
 typedef struct {
     StealthcomUser *user;
+    bool initiator;
     std::atomic<bool> key_exchange_stop_flag;
     std::atomic<bool> have_peer_pub_key;
     std::atomic<bool> dh_params_delivered;
@@ -44,8 +45,9 @@ struct pub_key_payload {
 static ex_status *status;
 static dh_params *params;
 
-static void status_init(StealthcomUser *user) {
+static void status_init(StealthcomUser *user, bool initiator) {
     status->user = user;
+    status->initiator = initiator;
     status->key_exchange_stop_flag.store(false);
     status->have_peer_pub_key.store(false);
     status->dh_params_delivered.store(false);
@@ -72,7 +74,7 @@ static void populate_payload(dh_params_payload *payload) {
 
 static void populate_payload(pub_key_payload *payload) {
     if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES) {
-        system_push_msg("Error: Vector size does not match PARAM_LEN_BYTES");
+        system_push_msg("Crypto Error: Vector size does not match PARAM_LEN_BYTES");
         return;
     }
 
@@ -81,7 +83,89 @@ static void populate_payload(pub_key_payload *payload) {
 }
 
 static void generate_private_key() {
+    BIGNUM* priv_key = BN_new();
+    if (!priv_key) {
+        system_push_msg("Crypto Error: Failed to allocate memory for BIGNUM");
+        BN_free(priv_key);
+        return;
+    }
 
+    if (!BN_rand(priv_key, PARAM_LEN_BITS, BN_RAND_TOP_ONE, BN_RAND_BOTTOM_ANY)) {
+        system_push_msg("Crypto Error: Failed to generate " + std::to_string(PARAM_LEN_BITS) + " bit private key");
+        BN_free(priv_key);
+        return;
+    }
+
+    std::vector<unsigned char> priv_key_byte_vector(BN_num_bytes(priv_key));
+    BN_bn2bin(priv_key, priv_key_byte_vector.data());
+    params->priv_key_byte_vector = priv_key_byte_vector;
+
+    BN_free(priv_key);
+}
+
+static void generate_public_key() {
+    if (params->priv_key_byte_vector.empty() || 
+        params->p_byte_vector.empty() || 
+        params->g_byte_vector.empty()) {
+        system_push_msg("Crypto Error: Missing private key or DH parameters");
+        return;
+    }
+
+    DH* dh = DH_new();
+    if (dh == nullptr) {
+        system_push_msg("Crypto Error: Failed to create DH object");
+        return;
+    }
+
+    BIGNUM* p = BN_bin2bn(params->p_byte_vector.data(), params->p_byte_vector.size(), nullptr);
+    BIGNUM* g = BN_bin2bn(params->g_byte_vector.data(), params->g_byte_vector.size(), nullptr);
+    BIGNUM* priv_key = BN_bin2bn(params->priv_key_byte_vector.data(), params->priv_key_byte_vector.size(), nullptr);
+
+    if (p == nullptr || g == nullptr || priv_key == nullptr) {
+        system_push_msg("Crypto Error: Failed to convert parameters to BIGNUM");
+        BN_free(p);
+        BN_free(g);
+        BN_free(priv_key);
+        DH_free(dh);
+        return;
+    }
+
+    if (DH_set0_pqg(dh, p, nullptr, g) != 1) {
+        system_push_msg("Crypto Error: Failed to set DH parameters");
+        BN_free(p);
+        BN_free(g);
+        BN_free(priv_key);
+        DH_free(dh);
+        return;
+    }
+
+    if (DH_set0_key(dh, nullptr, priv_key) != 1) {
+        system_push_msg("Crypto Error: Failed to set private key");
+        BN_free(priv_key);
+        DH_free(dh);
+        return;
+    }
+
+    if (DH_generate_key(dh) != 1) {
+        system_push_msg("Crypto Error: Failed to generate public key");
+        DH_free(dh);
+        return;
+    }
+
+    const BIGNUM* pub_key = nullptr;
+    DH_get0_key(dh, &pub_key, nullptr);
+
+    if (pub_key == nullptr) {
+        system_push_msg("Crypto Error: Failed to retrieve public key");
+        DH_free(dh);
+        return;
+    }
+
+    std::vector<unsigned char> pub_key_byte_vector(BN_num_bytes(pub_key));
+    BN_bn2bin(pub_key, pub_key_byte_vector.data());
+    params->pub_key_byte_vector = pub_key_byte_vector;
+
+    DH_free(dh);
 }
 
 static void save_dh_params(stealthcom_L2_extension *ext) {
@@ -104,6 +188,9 @@ static void save_dh_params(stealthcom_L2_extension *ext) {
     params->peer_pub_key_byte_vector = peer_pub_key_byte_vector;
 
     generate_private_key();
+    generate_public_key();
+
+    status->have_peer_pub_key.store(true);
 }
 
 static void deliver_pub_key() {
@@ -157,7 +244,7 @@ void key_exchange_thread(StealthcomUser *user, bool initiator) {
 
     ex_status s;
     status = &s;
-    status_init(user);
+    status_init(user, initiator);
 
     dh_params p;
     params = &p;
@@ -178,18 +265,39 @@ void key_exchange_packet_handler(stealthcom_L2_extension *ext) {
 
     switch(subtype) {
         case DH_PARAMS: {
+            if(status->initiator) {
+                system_push_msg("Crypto Error: received DH params while initiator");
+                break;
+            }
+
+            if(status->have_peer_pub_key.load()) {
+                break;
+            }
+
             save_dh_params(ext);
-            status->have_peer_pub_key.store(true);
+            
             break;
         }
         case DH_PARAMS_ACK: {
+            if(!status->initiator) {
+                system_push_msg("Crypto Error: received DH params ACK while responder");
+                break;
+            }
             status->dh_params_delivered.store(true);
             break;
         }
         case PUB_KEY: {
+            if(!status->initiator) {
+                system_push_msg("Crypto Error: received pub key while responder");
+                break;
+            }
             break;
         }
         case PUB_KEY_ACK: {
+            if(status->initiator) {
+                system_push_msg("Crypto Error: received pubkey ACK while initiator");
+                break;
+            }
             status->dh_params_delivered.store(true);
             break;
         }
@@ -200,14 +308,14 @@ void generate_dh_key_pair() {
     DH* dh = DH_new();
 
     if (dh == nullptr) {
-        system_push_msg("Failed to create DH object");
+        system_push_msg("Crypto Error: Failed to create DH object");
         terminate_key_exchange();
         return;
     }
 
     if (DH_generate_parameters_ex(dh, PARAM_LEN_BITS, DH_GENERATOR_2, nullptr) != 1) {
         DH_free(dh);
-        system_push_msg("Failed to generate DH parameters");
+        system_push_msg("Crypto Error: Failed to generate DH parameters");
         terminate_key_exchange();
         return;
     }
@@ -226,7 +334,7 @@ void generate_dh_key_pair() {
 
     if (DH_generate_key(dh) != 1) {
         DH_free(dh);
-        system_push_msg("Failed to generate DH key pair");
+        system_push_msg("Crypto Error: Failed to generate DH key pair");
         terminate_key_exchange();
         return;
     }
