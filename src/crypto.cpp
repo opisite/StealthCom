@@ -15,6 +15,7 @@
 
 #define PARAM_LEN_BITS   2048
 #define PARAM_LEN_BYTES  ((PARAM_LEN_BITS + 7) / 8)
+#define GENERATOR_SIZE   1
 
 #define KEY_LEN_BITS     256
 #define KEY_LEN_BYTES    (KEY_LEN_BITS / 8)
@@ -35,15 +36,15 @@ typedef struct {
     std::vector<unsigned char> peer_pub_key_byte_vector;
 } dh_params;
 
-struct dh_params_payload {
-    int item_len_bits;
+struct __attribute__((packed)) dh_params_payload {
+    uint16_t item_len_bits;
     unsigned char pub_key[PARAM_LEN_BYTES];
     unsigned char p[PARAM_LEN_BYTES];
-    unsigned char g[PARAM_LEN_BYTES];
+    unsigned char g[GENERATOR_SIZE];
 };
 
-struct pub_key_payload {
-    int key_len_bits;
+struct  __attribute__((packed)) pub_key_payload {
+    uint16_t key_len_bits;
     unsigned char pub_key[PARAM_LEN_BYTES];
 };
 
@@ -68,8 +69,9 @@ static void terminate_key_exchange() {
 static void populate_payload(dh_params_payload *payload) {
     if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES ||
         params->p_byte_vector.size() != PARAM_LEN_BYTES ||
-        params->g_byte_vector.size() != PARAM_LEN_BYTES) {
-        system_push_msg("Error: Vector sizes do not match PARAM_LEN_BYTES");
+        params->g_byte_vector.size() != GENERATOR_SIZE) {
+        system_push_msg("Crypto Error: Vector sizes do not match expected: " + std::to_string(params->pub_key_byte_vector.size()) 
+                            + ", " + std::to_string(params->p_byte_vector.size()) + ", " + std::to_string(params->g_byte_vector.size()));
         return;
     }
 
@@ -81,7 +83,7 @@ static void populate_payload(dh_params_payload *payload) {
 
 static void populate_payload(pub_key_payload *payload) {
     if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES) {
-        system_push_msg("Crypto Error: Vector size does not match PARAM_LEN_BYTES");
+        system_push_msg("Crypto Error: Vector size does not match expected: " + std::to_string(params->pub_key_byte_vector.size()));
         return;
     }
 
@@ -190,18 +192,18 @@ static void send_ack(int subtype) {
 }
 
 static void save_dh_params(stealthcom_L2_extension *ext) {
-    dh_params_payload *payload = (dh_params_payload *)&ext->payload;
+    dh_params_payload *payload = (dh_params_payload *)ext->payload;
 
     if(payload->item_len_bits != PARAM_LEN_BITS) {
-        system_push_msg("Crypto Error: length of incoming DH parameters do not match local");
+        system_push_msg("Crypto Error: length of incoming DH parameters do not match local: " + std::to_string(static_cast<int>(payload->item_len_bits)));
     }
 
     std::vector<unsigned char> p_byte_vector(PARAM_LEN_BYTES);
-    std::vector<unsigned char> g_byte_vector(PARAM_LEN_BYTES);
+    std::vector<unsigned char> g_byte_vector(GENERATOR_SIZE);
     std::vector<unsigned char> peer_pub_key_byte_vector(PARAM_LEN_BYTES);
 
     std::copy(payload->p, payload->p + PARAM_LEN_BYTES, p_byte_vector.begin());
-    std::copy(payload->g, payload->g + PARAM_LEN_BYTES, g_byte_vector.begin());
+    std::copy(payload->g, payload->g + GENERATOR_SIZE, g_byte_vector.begin());
     std::copy(payload->pub_key, payload->pub_key + PARAM_LEN_BYTES, peer_pub_key_byte_vector.begin());
 
     params->p_byte_vector = p_byte_vector;
@@ -210,7 +212,7 @@ static void save_dh_params(stealthcom_L2_extension *ext) {
 
     status->have_peer_pub_key.store(true);
 
-    send_ack(DH_PARAMS);
+    send_ack(DH_PARAMS_ACK);
 
     system_push_msg("Crypto: Received DH params from peer");
 }
@@ -218,8 +220,8 @@ static void save_dh_params(stealthcom_L2_extension *ext) {
 static void save_pub_key(stealthcom_L2_extension *ext) {
     pub_key_payload *payload = (pub_key_payload *)ext->payload;
 
-    if(payload ->key_len_bits != PARAM_LEN_BITS) {
-        system_push_msg("Crypto Error: length of incoming DH parameters do not match local");
+    if(payload->key_len_bits != PARAM_LEN_BITS) {
+        system_push_msg("Crypto Error: length of incoming pubkey do not match local: " + std::to_string(static_cast<int>(payload->key_len_bits)));
     }
 
     std::vector<unsigned char> peer_pub_key_byte_vector(PARAM_LEN_BYTES);
@@ -227,7 +229,7 @@ static void save_pub_key(stealthcom_L2_extension *ext) {
 
     status->have_peer_pub_key.store(true);
 
-    send_ack(PUB_KEY);
+    send_ack(PUB_KEY_ACK);
 
     system_push_msg("Crypto: Received pubkey from peer");
 }
@@ -243,23 +245,15 @@ static void deliver_pub_key() {
                                                 (const char *)&payload);
 
     while(!status->dh_params_delivered.load() && !status->key_exchange_stop_flag.load()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
         system_push_msg("Crypto: Sending pubkey...");
         send_packet(ext);
-    }
-
-    if(status->dh_params_delivered.load()) {
-        system_push_msg("Crypto: Pubkey delivered");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
 
 static inline void wait_for_pub_key() {
     while(!status->have_peer_pub_key.load() && !status->key_exchange_stop_flag.load()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-
-    if(status->have_peer_pub_key.load()) {
-        system_push_msg("Crpyto: Received pubkey");
     }
 }
 
@@ -274,13 +268,9 @@ static bool deliver_dh_params() {
                                                 (const char *)&payload);
 
     while(!status->dh_params_delivered.load() && !status->key_exchange_stop_flag.load()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
         system_push_msg("Crypto: Sending DH params...");
         send_packet(ext);
-    }
-
-    if(status->dh_params_delivered.load()) {
-        system_push_msg("Crypto: DH Params delivered");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
 
@@ -310,6 +300,13 @@ static void generate_dh_key_pair() {
     BN_bn2bin(p, p_byte_vector.data());
     std::vector<unsigned char> g_byte_vector(BN_num_bytes(g));
     BN_bn2bin(g, g_byte_vector.data());
+
+    if(p_byte_vector.size() != PARAM_LEN_BYTES) {
+        system_push_msg("Crypto Error: Incorrect p vector size: " + std::to_string(p_byte_vector.size()));
+    }
+    if(g_byte_vector.size() != GENERATOR_SIZE) {
+        system_push_msg("Crypto Error: Incorrect g vector size: " + std::to_string(g_byte_vector.size()));
+    }
 
     params->p_byte_vector = p_byte_vector;
     params->g_byte_vector = g_byte_vector;
@@ -485,6 +482,8 @@ void key_exchange_thread(StealthcomUser *user, bool initiator) {
     user_registry->protect_users();
     state_machine->set_connection_state(KEY_EXCHANGE);
 
+    system_push_msg("Beginning key exchange with " + std::to_string(PARAM_LEN_BITS) + " bit parameters (" + std::to_string(PARAM_LEN_BYTES) + ") bytes");
+
     ex_status s;
     status = &s;
     status_init(user, initiator);
@@ -533,12 +532,17 @@ void key_exchange_packet_handler(stealthcom_L2_extension *ext) {
                 system_push_msg("Crypto Error: received DH params ACK while responder");
                 break;
             }
-            status->dh_params_delivered.store(true);
+
+            if(!status->dh_params_delivered.load()) {
+                system_push_msg("Crypto: DH Params delivered");
+                status->dh_params_delivered.store(true);
+            }
+            
             break;
         }
         case PUB_KEY: {
             if(!status->initiator) {
-                system_push_msg("Crypto Error: received pub key while responder");
+                system_push_msg("Crypto Error: received pubkey while responder");
                 break;
             }
 
@@ -555,7 +559,12 @@ void key_exchange_packet_handler(stealthcom_L2_extension *ext) {
                 system_push_msg("Crypto Error: received pubkey ACK while initiator");
                 break;
             }
-            status->dh_params_delivered.store(true);
+
+            if(!status->dh_params_delivered.load()) {
+                system_push_msg("Crypto: Pubkey delivered");
+                status->dh_params_delivered.store(true);
+            }
+            
             break;
         }
     }

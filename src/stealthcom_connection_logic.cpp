@@ -63,7 +63,7 @@ static void handle_stealthcom_conn_accept(struct stealthcom_L2_extension *ext, s
 
     system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] accepted your connection request - beginning key exchange");
 
-    std::thread keyExchangeThread(key_exchange_thread, user, false);
+    std::thread keyExchangeThread(key_exchange_thread, user, true);
     keyExchangeThread.detach();
 
     send_conn_accept_ack(user);
@@ -79,7 +79,7 @@ static void handle_stealthcom_conn_accept_ack(struct stealthcom_L2_extension *ex
 
     system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] acknowledged your accept - beginning key exchange");
 
-    std::thread keyExchangeThread(key_exchange_thread, user, true);
+    std::thread keyExchangeThread(key_exchange_thread, user, false);
     keyExchangeThread.detach(); 
 }
 
