@@ -3,7 +3,6 @@
 #include <openssl/ec.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
-#include <openssl/evp.h>
 #include <openssl/kdf.h>
 #include <chrono>
 #include <thread>
@@ -38,6 +37,7 @@ typedef struct {
 
 struct __attribute__((packed)) dh_params_payload {
     uint16_t item_len_bits;
+    uint16_t generator_size;
     unsigned char pub_key[PARAM_LEN_BYTES];
     unsigned char p[PARAM_LEN_BYTES];
     unsigned char g[GENERATOR_SIZE];
@@ -66,44 +66,63 @@ static void terminate_key_exchange() {
     status->key_exchange_stop_flag.store(true);
 }
 
-static void populate_payload(dh_params_payload *payload) {
-    if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES ||
-        params->p_byte_vector.size() != PARAM_LEN_BYTES ||
-        params->g_byte_vector.size() != GENERATOR_SIZE) {
-        system_push_msg("Crypto Error: Vector sizes do not match expected: " + std::to_string(params->pub_key_byte_vector.size()) 
-                            + ", " + std::to_string(params->p_byte_vector.size()) + ", " + std::to_string(params->g_byte_vector.size()));
-        return;
-    }
-
-    payload->item_len_bits = PARAM_LEN_BITS;
-    std::copy(params->pub_key_byte_vector.begin(), params->pub_key_byte_vector.end(), payload->pub_key);
-    std::copy(params->p_byte_vector.begin(), params->p_byte_vector.end(), payload->p);
-    std::copy(params->g_byte_vector.begin(), params->g_byte_vector.end(), payload->g);
-}
-
-static void populate_payload(pub_key_payload *payload) {
-    if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES) {
-        system_push_msg("Crypto Error: Vector size does not match expected: " + std::to_string(params->pub_key_byte_vector.size()));
-        return;
-    }
-
-    payload->key_len_bits = PARAM_LEN_BITS;
-    std::copy(params->pub_key_byte_vector.begin(), params->pub_key_byte_vector.end(), payload->pub_key);
-}
-
 static void generate_private_key() {
     system_push_msg("Crypto: Generating private key...");
 
     BIGNUM* priv_key = BN_new();
     if (!priv_key) {
         system_push_msg("Crypto Error: Failed to allocate memory for BIGNUM");
+        return;
+    }
+
+    // Ensure p is properly set and converted to BIGNUM
+    BIGNUM* p = BN_bin2bn(params->p_byte_vector.data(), params->p_byte_vector.size(), nullptr);
+    if (!p) {
+        system_push_msg("Crypto Error: Failed to convert p to BIGNUM");
         BN_free(priv_key);
         return;
     }
 
-    if (!BN_rand(priv_key, PARAM_LEN_BITS, BN_RAND_TOP_ONE, BN_RAND_BOTTOM_ANY)) {
-        system_push_msg("Crypto Error: Failed to generate " + std::to_string(PARAM_LEN_BITS) + " bit private key");
+    // Create p-1
+    BIGNUM* p_minus_1 = BN_dup(p);
+    if (!BN_sub_word(p_minus_1, 1)) {
+        system_push_msg("Crypto Error: Failed to compute p-1");
         BN_free(priv_key);
+        BN_free(p);
+        BN_free(p_minus_1);
+        return;
+    }
+
+    // Debugging: Print the values of p and p_minus_1
+    char* p_str = BN_bn2hex(p);
+    char* p_minus_1_str = BN_bn2hex(p_minus_1);
+    system_push_msg(std::string("p: ") + p_str);
+    system_push_msg(std::string("p-1: ") + p_minus_1_str);
+    OPENSSL_free(p_str);
+    OPENSSL_free(p_minus_1_str);
+
+    // Generate random private key in range [1, p-1]
+    if (!BN_rand_range(priv_key, p_minus_1) || BN_is_zero(priv_key) || BN_is_one(priv_key)) {
+        // Detailed error reporting
+        unsigned long err = ERR_get_error();
+        char err_buf[256];
+        ERR_error_string_n(err, err_buf, sizeof(err_buf));
+        std::string error_message = "Crypto Error: Failed to generate valid private key in range [1, p-1]: ";
+        error_message += err_buf;
+        system_push_msg(error_message.c_str());
+        
+        BN_free(priv_key);
+        BN_free(p);
+        BN_free(p_minus_1);
+        return;
+    }
+
+    // Add 1 to ensure range [1, p-1]
+    if (!BN_add_word(priv_key, 1)) {
+        system_push_msg("Crypto Error: Failed to adjust private key to range [1, p-1]");
+        BN_free(priv_key);
+        BN_free(p);
+        BN_free(p_minus_1);
         return;
     }
 
@@ -112,6 +131,8 @@ static void generate_private_key() {
     params->priv_key_byte_vector = priv_key_byte_vector;
 
     BN_free(priv_key);
+    BN_free(p);
+    BN_free(p_minus_1);
 }
 
 static void generate_public_key() {
@@ -121,6 +142,13 @@ static void generate_public_key() {
         params->p_byte_vector.empty() || 
         params->g_byte_vector.empty()) {
         system_push_msg("Crypto Error: Missing private key or DH parameters");
+        return;
+    }
+
+    if (params->priv_key_byte_vector.size() != PARAM_LEN_BYTES || 
+        params->p_byte_vector.size() != PARAM_LEN_BYTES || 
+        params->g_byte_vector.size() != GENERATOR_SIZE) {
+        system_push_msg("Crypto Error: One or more DH parameter have incorrect length");
         return;
     }
 
@@ -160,7 +188,12 @@ static void generate_public_key() {
     }
 
     if (DH_generate_key(dh) != 1) {
-        system_push_msg("Crypto Error: Failed to generate public key");
+        unsigned long err = ERR_get_error();
+        char err_buf[256];
+        ERR_error_string_n(err, err_buf, sizeof(err_buf));
+        std::string error_message = "Crypto Error: Failed to generate public key: ";
+        error_message += err_buf;
+        system_push_msg(error_message.c_str());
         DH_free(dh);
         return;
     }
@@ -178,6 +211,8 @@ static void generate_public_key() {
     BN_bn2bin(pub_key, pub_key_byte_vector.data());
     params->pub_key_byte_vector = pub_key_byte_vector;
 
+    system_push_msg("Crypto: Generated public key");
+
     DH_free(dh);
 }
 
@@ -189,14 +224,82 @@ static void send_ack(int subtype) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         send_packet(ext);
     }
+    free(ext);
+}
+
+static void save_pub_key(stealthcom_L2_extension *ext) {
+    pub_key_payload *payload = (pub_key_payload *)ext->payload;
+
+    if(payload->key_len_bits != PARAM_LEN_BITS) {
+        system_push_msg("Crypto Error: length of incoming pubkey does not match expected: " + std::to_string(static_cast<int>(payload->key_len_bits)));
+    }
+
+    std::vector<unsigned char> peer_pub_key_byte_vector(PARAM_LEN_BYTES);
+    std::copy(payload->pub_key, payload->pub_key + PARAM_LEN_BYTES, peer_pub_key_byte_vector.begin());
+
+    status->have_peer_pub_key.store(true);
+
+    send_ack(PUB_KEY_ACK);
+
+    system_push_msg("Crypto: Received pubkey from peer");
+}
+
+static void populate_payload(pub_key_payload *payload) {
+    if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES) {
+        system_push_msg("Crypto Error: Vector size does not match expected: " + std::to_string(params->pub_key_byte_vector.size()));
+        return;
+    }
+
+    payload->key_len_bits = PARAM_LEN_BITS;
+    std::copy(params->pub_key_byte_vector.begin(), params->pub_key_byte_vector.end(), payload->pub_key);
+}
+
+static void deliver_pub_key() {
+    pub_key_payload payload;
+    uint16_t payload_size = sizeof(payload);
+    populate_payload(&payload);
+
+    stealthcom_L2_extension *ext = generate_ext(KEY_EX | PUB_KEY,
+                                                status->user->getMAC(),
+                                                payload_size,
+                                                (const char *)&payload);
+
+    while(!status->dh_params_delivered.load() && !status->key_exchange_stop_flag.load()) {
+    //    system_push_msg("Crypto: Sending pubkey...");
+        send_packet(ext);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    free(ext);
+}
+
+static inline void wait_for_pub_key() {
+    while(!status->have_peer_pub_key.load() && !status->key_exchange_stop_flag.load()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 static void save_dh_params(stealthcom_L2_extension *ext) {
     dh_params_payload *payload = (dh_params_payload *)ext->payload;
 
-    if(payload->item_len_bits != PARAM_LEN_BITS) {
-        system_push_msg("Crypto Error: length of incoming DH parameters do not match local: " + std::to_string(static_cast<int>(payload->item_len_bits)));
+    if (payload->item_len_bits != PARAM_LEN_BITS) {
+        system_push_msg("Crypto Error: length of incoming DH parameters do not match expected: " + std::to_string(static_cast<int>(payload->item_len_bits)));
+        return;
     }
+    if (payload->generator_size != GENERATOR_SIZE) {
+        system_push_msg("Crypto Error: length of incoming generator does not match expected: " + std::to_string(static_cast<int>(payload->generator_size)));
+        return;
+    }
+
+    // Debugging: Print the values of received p, g, and pub_key
+    char *p_str = BN_bn2hex(BN_bin2bn(payload->p, PARAM_LEN_BYTES, NULL));
+    char *g_str = BN_bn2hex(BN_bin2bn(payload->g, GENERATOR_SIZE, NULL));
+    char *pub_key_str = BN_bn2hex(BN_bin2bn(payload->pub_key, PARAM_LEN_BYTES, NULL));
+    system_push_msg(std::string("Received p: ") + p_str);
+    system_push_msg(std::string("Received g: ") + g_str);
+    system_push_msg(std::string("Received pub_key: ") + pub_key_str);
+    OPENSSL_free(p_str);
+    OPENSSL_free(g_str);
+    OPENSSL_free(pub_key_str);
 
     std::vector<unsigned char> p_byte_vector(PARAM_LEN_BYTES);
     std::vector<unsigned char> g_byte_vector(GENERATOR_SIZE);
@@ -217,50 +320,37 @@ static void save_dh_params(stealthcom_L2_extension *ext) {
     system_push_msg("Crypto: Received DH params from peer");
 }
 
-static void save_pub_key(stealthcom_L2_extension *ext) {
-    pub_key_payload *payload = (pub_key_payload *)ext->payload;
-
-    if(payload->key_len_bits != PARAM_LEN_BITS) {
-        system_push_msg("Crypto Error: length of incoming pubkey do not match local: " + std::to_string(static_cast<int>(payload->key_len_bits)));
+static void populate_payload(dh_params_payload *payload) {
+    if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES ||
+        params->p_byte_vector.size() != PARAM_LEN_BYTES ||
+        params->g_byte_vector.size() != GENERATOR_SIZE) {
+        system_push_msg("Crypto Error: Vector sizes do not match expected: " + std::to_string(params->pub_key_byte_vector.size()) 
+                            + ", " + std::to_string(params->p_byte_vector.size()) + ", " + std::to_string(params->g_byte_vector.size()));
+        return;
     }
 
-    std::vector<unsigned char> peer_pub_key_byte_vector(PARAM_LEN_BYTES);
-    std::copy(payload->pub_key, payload->pub_key + PARAM_LEN_BYTES, peer_pub_key_byte_vector.begin());
-
-    status->have_peer_pub_key.store(true);
-
-    send_ack(PUB_KEY_ACK);
-
-    system_push_msg("Crypto: Received pubkey from peer");
-}
-
-static void deliver_pub_key() {
-    pub_key_payload payload;
-    uint16_t payload_size = sizeof(payload);
-    populate_payload(&payload);
-
-    stealthcom_L2_extension *ext = generate_ext(KEY_EX | PUB_KEY,
-                                                status->user->getMAC(),
-                                                payload_size,
-                                                (const char *)&payload);
-
-    while(!status->dh_params_delivered.load() && !status->key_exchange_stop_flag.load()) {
-        system_push_msg("Crypto: Sending pubkey...");
-        send_packet(ext);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-}
-
-static inline void wait_for_pub_key() {
-    while(!status->have_peer_pub_key.load() && !status->key_exchange_stop_flag.load()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+    payload->item_len_bits = PARAM_LEN_BITS;
+    payload->generator_size = GENERATOR_SIZE;
+    std::copy(params->pub_key_byte_vector.begin(), params->pub_key_byte_vector.end(), payload->pub_key);
+    std::copy(params->p_byte_vector.begin(), params->p_byte_vector.end(), payload->p);
+    std::copy(params->g_byte_vector.begin(), params->g_byte_vector.end(), payload->g);
 }
 
 static bool deliver_dh_params() {
     dh_params_payload payload;
     uint16_t payload_size = sizeof(payload);
     populate_payload(&payload);
+
+    // Debugging: Print the values of received p, g, and pub_key
+    char *p_str = BN_bn2hex(BN_bin2bn(payload.p, PARAM_LEN_BYTES, NULL));
+    char *g_str = BN_bn2hex(BN_bin2bn(payload.g, GENERATOR_SIZE, NULL));
+    char *pub_key_str = BN_bn2hex(BN_bin2bn(payload.pub_key, PARAM_LEN_BYTES, NULL));
+    system_push_msg(std::string("Sending p: ") + p_str);
+    system_push_msg(std::string("Sending g: ") + g_str);
+    system_push_msg(std::string("Sending pub_key: ") + pub_key_str);
+    OPENSSL_free(p_str);
+    OPENSSL_free(g_str);
+    OPENSSL_free(pub_key_str);
 
     stealthcom_L2_extension *ext = generate_ext(KEY_EX | DH_PARAMS,
                                                 status->user->getMAC(),
@@ -272,6 +362,7 @@ static bool deliver_dh_params() {
         send_packet(ext);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
+    free(ext);
 }
 
 static void generate_dh_key_pair() {
@@ -295,6 +386,13 @@ static void generate_dh_key_pair() {
     const BIGNUM* p = nullptr;
     const BIGNUM* g = nullptr;
     DH_get0_pqg(dh, &p, nullptr, &g);
+
+    if (p == nullptr || g == nullptr) {
+        system_push_msg("Crypto Error: Failed to get DH parameters p or g");
+        DH_free(dh);
+        terminate_key_exchange();
+        return;
+    }
 
     std::vector<unsigned char> p_byte_vector(BN_num_bytes(p));
     BN_bn2bin(p, p_byte_vector.data());
@@ -321,6 +419,13 @@ static void generate_dh_key_pair() {
     const BIGNUM* pub_key = nullptr;
     const BIGNUM* priv_key = nullptr;
     DH_get0_key(dh, &pub_key, &priv_key);
+
+    if (pub_key == nullptr || priv_key == nullptr) {
+        system_push_msg("Crypto Error: Failed to get DH keys");
+        DH_free(dh);
+        terminate_key_exchange();
+        return;
+    }
 
     std::vector<unsigned char> public_key(BN_num_bytes(pub_key));
     BN_bn2bin(pub_key, public_key.data());
@@ -480,7 +585,6 @@ static bool dh_initiator() {
 
 void key_exchange_thread(StealthcomUser *user, bool initiator) {
     user_registry->protect_users();
-    state_machine->set_connection_state(KEY_EXCHANGE);
 
     system_push_msg("Beginning key exchange with " + std::to_string(PARAM_LEN_BITS) + " bit parameters (" + std::to_string(PARAM_LEN_BYTES) + ") bytes");
 

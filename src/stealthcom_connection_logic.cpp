@@ -51,6 +51,7 @@ static void send_conn_accept_ack(StealthcomUser *user) {
         send_packet(ext);
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+    free(ext);
 }
 
 static void handle_stealthcom_conn_accept(struct stealthcom_L2_extension *ext, std::string& user_ID_str) {
@@ -63,6 +64,7 @@ static void handle_stealthcom_conn_accept(struct stealthcom_L2_extension *ext, s
 
     system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] accepted your connection request - beginning key exchange");
 
+    state_machine->set_connection_state(KEY_EXCHANGE);
     std::thread keyExchangeThread(key_exchange_thread, user, true);
     keyExchangeThread.detach();
 
@@ -79,6 +81,7 @@ static void handle_stealthcom_conn_accept_ack(struct stealthcom_L2_extension *ex
 
     system_push_msg("User [" + user_ID_str + "] with address [" + MAC_str + "] acknowledged your accept - beginning key exchange");
 
+    state_machine->set_connection_state(KEY_EXCHANGE);
     std::thread keyExchangeThread(key_exchange_thread, user, false);
     keyExchangeThread.detach(); 
 }
@@ -139,6 +142,8 @@ void send_conn_request(StealthcomUser *user) {
         send_packet(ext);
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+    free(ext);
+
     request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
 
     state_machine->set_connection_state_and_user(AWAITING_CONNECTION_RESPONSE, user);
@@ -159,6 +164,8 @@ void send_conn_request_response(StealthcomUser *user, bool accept) {
         send_packet(ext);
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+    free(ext);
+
     request_registry->add_or_update_entry(&ext->dest_MAC[0], OUTBOUND);
 }
 
@@ -172,4 +179,5 @@ void send_disconnect() {
         send_packet(ext);
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+    free(ext);
 }
