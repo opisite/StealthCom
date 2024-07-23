@@ -98,7 +98,7 @@ stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6
     return ext;
 }
 
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint16_t payload_len, const char *payload) {
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, ext_payload_len_t payload_len, const char *payload) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
     int user_ID_len = this_user_ID.length();

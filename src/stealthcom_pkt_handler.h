@@ -34,7 +34,8 @@
 #define PUB_KEY         2
 #define PUB_KEY_ACK     3
 
-typedef uint8_t sc_pkt_type_t;
+typedef uint8_t     sc_pkt_type_t;
+typedef uint16_t    ext_payload_len_t;
 
 struct __attribute__((packed)) stealthcom_L2_extension {
     sc_pkt_type_t type;
@@ -42,10 +43,10 @@ struct __attribute__((packed)) stealthcom_L2_extension {
     uint8_t dest_MAC[6];
     uint8_t user_ID_len;
     char user_ID[USER_ID_MAX_LEN];
-    uint8_t payload_len;
+    ext_payload_len_t payload_len;
     uint8_t payload[1]; // Variable length of data
 
-    static stealthcom_L2_extension * create(uint8_t payload_len) {
+    static stealthcom_L2_extension * create(ext_payload_len_t payload_len) {
         void* mem = std::malloc(sizeof(stealthcom_L2_extension) + payload_len - 1);
         if (!mem) {
             throw std::bad_alloc();
@@ -73,7 +74,7 @@ void packet_handler_thread();
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx);
 void set_advertise(int set);
 stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC);
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint16_t payload_len, const char *payload);
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, ext_payload_len_t payload_len, const char *payload);
 stealthcom_L2_extension * generate_ext(sc_pkt_type_t type);
 void send_packet(stealthcom_L2_extension * ext);
 

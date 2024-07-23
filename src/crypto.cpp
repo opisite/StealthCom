@@ -75,7 +75,6 @@ static void generate_private_key() {
         return;
     }
 
-    // Ensure p is properly set and converted to BIGNUM
     BIGNUM* p = BN_bin2bn(params->p_byte_vector.data(), params->p_byte_vector.size(), nullptr);
     if (!p) {
         system_push_msg("Crypto Error: Failed to convert p to BIGNUM");
@@ -83,7 +82,6 @@ static void generate_private_key() {
         return;
     }
 
-    // Create p-1
     BIGNUM* p_minus_1 = BN_dup(p);
     if (!BN_sub_word(p_minus_1, 1)) {
         system_push_msg("Crypto Error: Failed to compute p-1");
@@ -93,17 +91,7 @@ static void generate_private_key() {
         return;
     }
 
-    // Debugging: Print the values of p and p_minus_1
-    char* p_str = BN_bn2hex(p);
-    char* p_minus_1_str = BN_bn2hex(p_minus_1);
-    system_push_msg(std::string("p: ") + p_str);
-    system_push_msg(std::string("p-1: ") + p_minus_1_str);
-    OPENSSL_free(p_str);
-    OPENSSL_free(p_minus_1_str);
-
-    // Generate random private key in range [1, p-1]
     if (!BN_rand_range(priv_key, p_minus_1) || BN_is_zero(priv_key) || BN_is_one(priv_key)) {
-        // Detailed error reporting
         unsigned long err = ERR_get_error();
         char err_buf[256];
         ERR_error_string_n(err, err_buf, sizeof(err_buf));
@@ -117,7 +105,6 @@ static void generate_private_key() {
         return;
     }
 
-    // Add 1 to ensure range [1, p-1]
     if (!BN_add_word(priv_key, 1)) {
         system_push_msg("Crypto Error: Failed to adjust private key to range [1, p-1]");
         BN_free(priv_key);
@@ -236,6 +223,7 @@ static void save_pub_key(stealthcom_L2_extension *ext) {
 
     std::vector<unsigned char> peer_pub_key_byte_vector(PARAM_LEN_BYTES);
     std::copy(payload->pub_key, payload->pub_key + PARAM_LEN_BYTES, peer_pub_key_byte_vector.begin());
+    params->peer_pub_key_byte_vector = peer_pub_key_byte_vector;
 
     status->have_peer_pub_key.store(true);
 
@@ -256,7 +244,7 @@ static void populate_payload(pub_key_payload *payload) {
 
 static void deliver_pub_key() {
     pub_key_payload payload;
-    uint16_t payload_size = sizeof(payload);
+    ext_payload_len_t payload_size = sizeof(payload);
     populate_payload(&payload);
 
     stealthcom_L2_extension *ext = generate_ext(KEY_EX | PUB_KEY,
@@ -265,7 +253,7 @@ static void deliver_pub_key() {
                                                 (const char *)&payload);
 
     while(!status->dh_params_delivered.load() && !status->key_exchange_stop_flag.load()) {
-    //    system_push_msg("Crypto: Sending pubkey...");
+        system_push_msg("Crypto: Sending pubkey...");
         send_packet(ext);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
@@ -289,17 +277,6 @@ static void save_dh_params(stealthcom_L2_extension *ext) {
         system_push_msg("Crypto Error: length of incoming generator does not match expected: " + std::to_string(static_cast<int>(payload->generator_size)));
         return;
     }
-
-    // Debugging: Print the values of received p, g, and pub_key
-    char *p_str = BN_bn2hex(BN_bin2bn(payload->p, PARAM_LEN_BYTES, NULL));
-    char *g_str = BN_bn2hex(BN_bin2bn(payload->g, GENERATOR_SIZE, NULL));
-    char *pub_key_str = BN_bn2hex(BN_bin2bn(payload->pub_key, PARAM_LEN_BYTES, NULL));
-    system_push_msg(std::string("Received p: ") + p_str);
-    system_push_msg(std::string("Received g: ") + g_str);
-    system_push_msg(std::string("Received pub_key: ") + pub_key_str);
-    OPENSSL_free(p_str);
-    OPENSSL_free(g_str);
-    OPENSSL_free(pub_key_str);
 
     std::vector<unsigned char> p_byte_vector(PARAM_LEN_BYTES);
     std::vector<unsigned char> g_byte_vector(GENERATOR_SIZE);
@@ -338,24 +315,15 @@ static void populate_payload(dh_params_payload *payload) {
 
 static bool deliver_dh_params() {
     dh_params_payload payload;
-    uint16_t payload_size = sizeof(payload);
+    ext_payload_len_t payload_size = sizeof(payload);
     populate_payload(&payload);
-
-    // Debugging: Print the values of received p, g, and pub_key
-    char *p_str = BN_bn2hex(BN_bin2bn(payload.p, PARAM_LEN_BYTES, NULL));
-    char *g_str = BN_bn2hex(BN_bin2bn(payload.g, GENERATOR_SIZE, NULL));
-    char *pub_key_str = BN_bn2hex(BN_bin2bn(payload.pub_key, PARAM_LEN_BYTES, NULL));
-    system_push_msg(std::string("Sending p: ") + p_str);
-    system_push_msg(std::string("Sending g: ") + g_str);
-    system_push_msg(std::string("Sending pub_key: ") + pub_key_str);
-    OPENSSL_free(p_str);
-    OPENSSL_free(g_str);
-    OPENSSL_free(pub_key_str);
 
     stealthcom_L2_extension *ext = generate_ext(KEY_EX | DH_PARAMS,
                                                 status->user->getMAC(),
                                                 payload_size,
                                                 (const char *)&payload);
+
+    dh_params_payload *payload_ext = (dh_params_payload *)ext->payload;
 
     while(!status->dh_params_delivered.load() && !status->key_exchange_stop_flag.load()) {
         system_push_msg("Crypto: Sending DH params...");
@@ -444,7 +412,11 @@ static std::vector<unsigned char> compute_shared_secret() {
     system_push_msg("Crypto: Received all DH parameters, generating shared secret");
     if (params->priv_key_byte_vector.empty() || params->peer_pub_key_byte_vector.empty() ||
         params->p_byte_vector.empty() || params->g_byte_vector.empty()) {
-        system_push_msg("Crypto Error: Missing DH parameters or keys for shared secret computation");
+        system_push_msg("Crypto Error: Missing DH parameters or keys for shared secret computation: " +
+                            params->priv_key_byte_vector.empty() +
+                            params->peer_pub_key_byte_vector.empty() +
+                            params->p_byte_vector.empty() +
+                            params->g_byte_vector.empty());
         return {};
     }
 
@@ -586,7 +558,7 @@ static bool dh_initiator() {
 void key_exchange_thread(StealthcomUser *user, bool initiator) {
     user_registry->protect_users();
 
-    system_push_msg("Beginning key exchange with " + std::to_string(PARAM_LEN_BITS) + " bit parameters (" + std::to_string(PARAM_LEN_BYTES) + ") bytes");
+    system_push_msg("Crypto: Beginning key exchange with " + std::to_string(PARAM_LEN_BITS) + " bit parameters (" + std::to_string(PARAM_LEN_BYTES) + ") bytes");
 
     ex_status s;
     status = &s;
