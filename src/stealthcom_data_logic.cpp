@@ -11,6 +11,7 @@
 #include "stealthcom_state_machine.h"
 #include "data_registry.h"
 #include "io_handler.h"
+#include "crypto.h"
 
 static std::mutex msg_mutex;
 static MessageQueue *outbound_message_queue;
@@ -71,7 +72,10 @@ static void handle_data_ack(stealthcom_L2_extension *ext) {
 }
 
 static void handle_data(stealthcom_L2_extension *ext) {
-    Message *msg = (Message *)ext->payload;
+    unsigned char *encrypted_msg = ext->payload;
+    uint16_t decrypted_msg_size;
+    Message *msg = (Message *)decrypt(encrypted_msg, ext->payload_len, decrypted_msg_size);
+
     send_data_ack(msg->sequence_num);
     system_push_msg("Message Received, seq num: " + std::to_string(msg->sequence_num));
 
@@ -114,9 +118,12 @@ void resend_message(sequence_num_t seq_number) {
 void send_message(const Message *msg) {
     ConnectionContext context = state_machine->get_connection_context();
     StealthcomUser *user = context.user;
-    uint8_t msg_size = (sizeof(Message) - 1) + msg->msg_len;
 
-    stealthcom_L2_extension *ext = generate_ext(DATA | DATA_PAYLOAD, user->getMAC(), msg_size, (const char *)msg);
+    uint16_t msg_size = (sizeof(Message) - 1) + msg->msg_len;
+    uint16_t encrypted_msg_size;
+    void *encrypted_msg = encrypt((const unsigned char *)msg, msg_size, encrypted_msg_size);
+
+    stealthcom_L2_extension *ext = generate_ext(DATA | DATA_PAYLOAD, user->getMAC(), encrypted_msg_size, (const char *)encrypted_msg);
     send_packet(ext);
 }
 
@@ -178,7 +185,6 @@ static void print_outbound_msg(const MessageWrapper msg) {
 
     main_push_msg(status_str + " - " + std::string(msg.msg->payload));
 }
-
 
 void display_messages() {
     if(state_machine->get_state() != CHAT) {

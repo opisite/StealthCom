@@ -14,6 +14,7 @@
 #include "io_handler.h"
 #include "stealthcom_connection_logic.h"
 #include "stealthcom_data_logic.h"
+#include "crypto.h"
 
 std::atomic<bool> advertise_stop_flag;
 
@@ -97,7 +98,7 @@ stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6
     return ext;
 }
 
-stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, uint8_t payload_len, const char *payload) {
+stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, ext_payload_len_t payload_len, const char *payload) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
     int user_ID_len = this_user_ID.length();
@@ -191,6 +192,9 @@ void packet_handler_thread() {
                 ext_wrapper->buf = ext_c;
                 data_pkt_queue->push(std::move(ext_wrapper));
                 break;
+            }
+            case KEY_EX: {
+                key_exchange_packet_handler(ext);
             }
         }
     }

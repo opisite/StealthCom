@@ -15,6 +15,7 @@
 #include "request_registry.h"
 #include "data_registry.h"
 #include "utils.h"
+#include "crypto.h"
 
 #define Y 1
 #define N 0
@@ -94,6 +95,9 @@ static void print_menu_items() {
 static void print_user_details() {
     main_push_msg("User ID: " + get_user_ID());
     main_push_msg("User MAC: " + mac_addr_to_str(get_MAC()));
+    main_push_msg("");
+    main_push_msg("SESSION KEY");
+    print_encryption_key();
 }
 
 static void print_settings() {
