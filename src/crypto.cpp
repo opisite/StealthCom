@@ -579,7 +579,7 @@ void key_exchange_thread(StealthcomUser *user, bool initiator) {
 
     encryption_key = derive_encryption_key(shared_secret);
 
-    state_machine->set_connection_state(CONNECTED);
+    begin_connection(user);
     system_push_msg("Crypto: Key exchange complete - you may now securely exchange messages");
 
     user_registry->unprotect_users();
