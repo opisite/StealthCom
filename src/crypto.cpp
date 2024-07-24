@@ -646,22 +646,155 @@ void key_exchange_packet_handler(stealthcom_L2_extension *ext) {
     }
 }
 
-std::string encrypt_message(const std::string& message, const std::vector<unsigned char>& key) {
+static const unsigned int IV_LEN = 16;
+static const unsigned int TAG_LEN = 16;
 
+void* encrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length) {
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        system_push_msg("Crypto Error: Failed to create EVP_CIPHER_CTX");
+        return nullptr;
+    }
+
+    std::vector<unsigned char> iv(IV_LEN);
+    if (RAND_bytes(iv.data(), IV_LEN) != 1) {
+        system_push_msg("Crypto Error: Failed to generate IV");
+        EVP_CIPHER_CTX_free(ctx);
+        return nullptr;
+    }
+
+    int len = 0;
+    int ciphertext_len = 0;
+
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+        system_push_msg("Crypto Error: Failed to initialize AES-256-GCM encryption");
+        EVP_CIPHER_CTX_free(ctx);
+        return nullptr;
+    }
+
+    if (EVP_EncryptInit_ex(ctx, nullptr, nullptr, encryption_key.data(), iv.data()) != 1) {
+        system_push_msg("Crypto Error: Failed to set encryption key and IV");
+        EVP_CIPHER_CTX_free(ctx);
+        return nullptr;
+    }
+
+    unsigned char* ciphertext = new unsigned char[length + IV_LEN + TAG_LEN];
+    memcpy(ciphertext, iv.data(), IV_LEN);
+
+    if (EVP_EncryptUpdate(ctx, ciphertext + IV_LEN, &len, buffer, length) != 1) {
+        system_push_msg("Crypto Error: Failed to encrypt plaintext");
+        EVP_CIPHER_CTX_free(ctx);
+        delete[] ciphertext;
+        return nullptr;
+    }
+    ciphertext_len = len;
+
+    if (EVP_EncryptFinal_ex(ctx, ciphertext + IV_LEN + len, &len) != 1) {
+        system_push_msg("Crypto Error: Failed to finalize encryption");
+        EVP_CIPHER_CTX_free(ctx);
+        delete[] ciphertext;
+        return nullptr;
+    }
+    ciphertext_len += len;
+
+    std::vector<unsigned char> tag(TAG_LEN);
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, TAG_LEN, tag.data()) != 1) {
+        system_push_msg("Crypto Error: Failed to get GCM tag");
+        EVP_CIPHER_CTX_free(ctx);
+        delete[] ciphertext;
+        return nullptr;
+    }
+
+    memcpy(ciphertext + IV_LEN + ciphertext_len, tag.data(), TAG_LEN);
+
+    out_length = IV_LEN + ciphertext_len + TAG_LEN;
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ciphertext;
 }
 
-std::string decrypt_message(const std::string& message, const std::vector<unsigned char>& key) {
-    
+void* decrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length) {
+    if (length < IV_LEN + TAG_LEN) {
+        system_push_msg("Crypto Error: Ciphertext too short");
+        return nullptr;
+    }
+
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        system_push_msg("Crypto Error: Failed to create EVP_CIPHER_CTX");
+        return nullptr;
+    }
+
+    const unsigned char* iv = buffer;
+    const unsigned char* tag = buffer + length - TAG_LEN;
+    const unsigned char* encrypted_message = buffer + IV_LEN;
+    size_t encrypted_message_len = length - IV_LEN - TAG_LEN;
+
+    int len = 0;
+    int plaintext_len = 0;
+
+    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, nullptr, nullptr) != 1) {
+        system_push_msg("Crypto Error: Failed to initialize AES-256-GCM decryption");
+        EVP_CIPHER_CTX_free(ctx);
+        return nullptr;
+    }
+
+    if (EVP_DecryptInit_ex(ctx, nullptr, nullptr, encryption_key.data(), iv) != 1) {
+        system_push_msg("Crypto Error: Failed to set decryption key and IV");
+        EVP_CIPHER_CTX_free(ctx);
+        return nullptr;
+    }
+
+    unsigned char* plaintext = new unsigned char[encrypted_message_len];
+
+    if (EVP_DecryptUpdate(ctx, plaintext, &len, encrypted_message, encrypted_message_len) != 1) {
+        system_push_msg("Crypto Error: Failed to decrypt ciphertext");
+        EVP_CIPHER_CTX_free(ctx);
+        delete[] plaintext;
+        return nullptr;
+    }
+    plaintext_len = len;
+
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, TAG_LEN, (void*)tag) != 1) {
+        system_push_msg("Crypto Error: Failed to set GCM tag");
+        EVP_CIPHER_CTX_free(ctx);
+        delete[] plaintext;
+        return nullptr;
+    }
+
+    if (EVP_DecryptFinal_ex(ctx, plaintext + len, &len) != 1) {
+        system_push_msg("Crypto Error: Failed to finalize decryption");
+        EVP_CIPHER_CTX_free(ctx);
+        delete[] plaintext;
+        return nullptr;
+    }
+    plaintext_len += len;
+
+    out_length = plaintext_len;
+
+    EVP_CIPHER_CTX_free(ctx);
+    return plaintext;
 }
 
 void print_encryption_key() {
-    if(encryption_key.empty()) {
+    if (encryption_key.empty()) {
         main_push_msg("N/A");
         return;
-    } 
+    }
 
-    for(int x = 0; x < encryption_key.size(); x += 8) {
-        main_push_msg(std::to_string(encryption_key[x]) + std::to_string(encryption_key[x + 1]) + std::to_string(encryption_key[x + 2]) + std::to_string(encryption_key[x + 3])
-                        + std::to_string(encryption_key[x + 4]) + std::to_string(encryption_key[x + 5]) + std::to_string(encryption_key[x + 6]) + std::to_string(encryption_key[x + 7]));
+    std::string hex_line;
+    for (size_t i = 0; i < encryption_key.size(); ++i) {
+        char hex_byte[3];
+        snprintf(hex_byte, sizeof(hex_byte), "%02x", encryption_key[i]);
+        hex_line += hex_byte;
+
+        if ((i + 1) % 8 == 0) {
+            main_push_msg(hex_line.c_str());
+            hex_line.clear();
+        }
+    }
+
+    if (!hex_line.empty()) {
+        main_push_msg(hex_line.c_str());
     }
 }

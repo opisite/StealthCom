@@ -9,8 +9,8 @@
 
 void key_exchange_thread(StealthcomUser *user, bool initiatior);
 void key_exchange_packet_handler(stealthcom_L2_extension *ext);
-std::string encrypt_message(const std::string& message, const std::vector<unsigned char>& key);
-std::string decrypt_message(const std::string& message, const std::vector<unsigned char>& key);
+void* encrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length);
+void* decrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length);
 void print_encryption_key();
 
 
