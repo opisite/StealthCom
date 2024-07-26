@@ -15,6 +15,7 @@
 #include "stealthcom_connection_logic.h"
 #include "stealthcom_data_logic.h"
 #include "crypto.h"
+#include "stealthcom_state_machine.h"
 
 std::atomic<bool> advertise_stop_flag;
 
@@ -142,9 +143,23 @@ static inline bool check_source_self(const struct stealthcom_L2_extension *ext) 
     return true;
 }
 
-
 static inline bool is_recipient(const struct stealthcom_L2_extension *ext) {
     return (!check_source_self(ext) && (check_dest_self(ext) || check_dest_beacon(ext)));
+}
+
+static inline bool valid_source(const struct stealthcom_L2_extension *ext) {
+    ConnectionContext ctx = state_machine->get_connection_context();
+    if(ctx.connection_state == UNASSOCIATED) {
+        return true;
+    }
+
+    std::array<uint8_t, 6> ctx_user_MAC = ctx.user->getMAC();
+    for(int x = 0; x < 6; x++) {
+        if(ctx_user_MAC[x] != ext->source_MAC[x]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 static void handle_stealthcom_beacon(struct stealthcom_L2_extension *ext) {
@@ -159,6 +174,10 @@ void packet_handler_thread() {
         stealthcom_L2_extension *ext = (stealthcom_L2_extension *)((uint8_t *)hdr + sizeof(stealthcom_header));
 
         if(!is_recipient(ext)) {
+            continue;
+        }
+
+        if(!valid_source(ext)) {
             continue;
         }
 
