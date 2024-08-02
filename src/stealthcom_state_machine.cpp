@@ -47,12 +47,19 @@ struct {
     { "Advertise", 0, 0, {0, 1}, &set_advertise },
 };
 
-static const int menu_items_size = sizeof(menu_items) / sizeof(menu_items[0]);
-static const int settings_items_size = sizeof(settings_items) / sizeof(settings_items[0]);
+static const int menu_items_size = ARRAY_LEN(menu_items);
+static const int settings_items_size = ARRAY_LEN(settings_items);
 
 std::vector<StealthcomUser*> users;
 std::vector<StealthcomUser*> requests;
 
+/**
+ * @brief Convert a user input into an index corresponding to an item in an array
+ * 
+ * @param input the input string passed by the user
+ * @param size the size of the item array the user wants to select from
+ * @return INVALID if the input is not a valid index. Index value if the input is valid
+ */
 static int get_item(const std::string& input, int size) {
     int index;
     try {
@@ -65,6 +72,13 @@ static int get_item(const std::string& input, int size) {
     }
 }
 
+/**
+ * @brief Convert a user input into a value to be assigned to a setting
+ * 
+ * @param input the input string passed by the user
+ * @param range the range of possible values of the setting being modified
+ * @return INVALID if the input is not a valid value. Value if the input is valid
+ */
 static int get_value(const std::string& input, const std::pair<int, int> range) {
     int value;
     try {
@@ -77,6 +91,12 @@ static int get_value(const std::string& input, const std::pair<int, int> range) 
     }
 }
 
+/**
+ * @brief Get a yes/no value from a user input string
+ * 
+ * @param input the input string passed by the user
+ * @return INVALID if the user input is not a valid Y/N value. Y or N if user input is valid
+ */
 static int get_value(const std::string& input) {
     if(input == "Y" || input == "y")
         return Y;
@@ -85,6 +105,10 @@ static int get_value(const std::string& input) {
     return INVALID;
 }
 
+/**
+ * @brief Print all menu items to MAIN window
+ * 
+ */
 static void print_menu_items() {
     main_push_msg("MENU\n");
     for(int x = 0; x < menu_items_size; x++) {
@@ -92,6 +116,10 @@ static void print_menu_items() {
     }
 }
 
+/**
+ * @brief Print user details to MAIN window
+ * 
+ */
 static void print_user_details() {
     main_push_msg("User ID: " + get_user_ID());
     main_push_msg("User MAC: " + mac_addr_to_str(get_MAC()));
@@ -100,6 +128,10 @@ static void print_user_details() {
     print_encryption_key();
 }
 
+/**
+ * @brief Print settings to MAIN window
+ * 
+ */
 static void print_settings() {
     main_push_msg("SETTINGS (Exit to apply)\n");
     for(int x = 0; x < settings_items_size; x++) {
@@ -107,6 +139,10 @@ static void print_settings() {
     }
 }
 
+/**
+ * @brief (thread) print all known users (in user_registry) to the MAIN window, updating once per second
+ * 
+ */
 static void show_users_thread() {
     std::lock_guard<std::mutex> lock(running_mtx);
     stop_flag.store(false);
@@ -131,6 +167,10 @@ static void show_users_thread() {
     stop_flag.store(false);
 }
 
+/**
+ * @brief (thread) Show all connection requests (in request_registry) tp the MAIN window, updating once per second
+ * 
+ */
 static void show_connection_requests_thread() {
     std::lock_guard<std::mutex> lock(running_mtx);
     stop_flag.store(false);
@@ -155,6 +195,10 @@ static void show_connection_requests_thread() {
     stop_flag.store(false);
 }
 
+/**
+ * @brief Save and apply all modified settings
+ * 
+ */
 static void apply_settings() {
     for(int x = 0; x < settings_items_size; x++) {
         if(settings_items[x].value != settings_items[x].temp_value) {
@@ -164,6 +208,13 @@ static void apply_settings() {
     }
 }
 
+/**
+ * @brief Check if a user ID string is valid
+ * 
+ * @param user_ID the user ID string passed by the user
+ * @return true if the user ID is valid (string length <= USER_ID_MAX_LEN)
+ * @return false if the user ID is invalid (string length > USER_ID_MAX_LEN)
+ */
 static inline bool is_valid_user_ID(const std::string user_ID) {
     if(user_ID.length() > USER_ID_MAX_LEN) {
         return false;
@@ -171,6 +222,10 @@ static inline bool is_valid_user_ID(const std::string user_ID) {
     return true;
 }
 
+/**
+ * @brief Construct a new Stealthcom State Machine object
+ * 
+ */
 StealthcomStateMachine::StealthcomStateMachine() {
     substate_context = {
         ENTER_INDEX,
@@ -182,11 +237,20 @@ StealthcomStateMachine::StealthcomStateMachine() {
     set_state(ENTER_USER_ID);
 }
 
+/**
+ * @brief Reset the substate context to default values
+ * 
+ */
 inline void StealthcomStateMachine::reset_substate_context() {
     substate_context.interaction_type = ENTER_INDEX;
     substate_context.selected_index = INVALID;
 }
 
+/**
+ * @brief Set the state of the state machine
+ * 
+ * @param state the state to be transitioned to
+ */
 void StealthcomStateMachine::set_state(State state) {
     stop_flag.store(true);
     this->state = state;
@@ -195,6 +259,11 @@ void StealthcomStateMachine::set_state(State state) {
     perform_state_action(state);
 }
 
+/**
+ * @brief Perform the inital action that needs to be done upon state transition
+ * 
+ * @param state the state that the state machine is transitioning into
+ */
 void StealthcomStateMachine::perform_state_action(State state) {
     io_clr_output();
     switch (state) {
@@ -231,6 +300,12 @@ void StealthcomStateMachine::perform_state_action(State state) {
     }
 }
 
+/**
+ * @brief Perform the substate action that needs to be done within a certain state.
+ *          The particular action that is to be done depends on the substate context
+ * 
+ * @param state the current state of the state machine
+ */
 void StealthcomStateMachine::perform_substate_action(State state) {
     stop_flag.store(true);
     switch (state) {
@@ -254,6 +329,11 @@ void StealthcomStateMachine::perform_substate_action(State state) {
     }
 }
 
+/**
+ * @brief Handle the user input if the state is ENTER_USER_ID
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input_enter_user_ID(const std::string& input) {
     if(is_valid_user_ID(input)) {
             set_user_ID(input);
@@ -263,6 +343,11 @@ void StealthcomStateMachine::handle_input_enter_user_ID(const std::string& input
         }
 }
 
+/**
+ * @brief Handle the user input if the state is MENU
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input_menu(const std::string& input) {
     int index = get_item(input, menu_items_size);
     if(index != INVALID) {
@@ -270,6 +355,11 @@ void StealthcomStateMachine::handle_input_menu(const std::string& input) {
     }
 }
 
+/**
+ * @brief Handle the user input if the state is CHAT
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input_msg(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
@@ -292,6 +382,11 @@ void StealthcomStateMachine::handle_input_msg(const std::string& input) {
     create_message(input);
 }
 
+/**
+ * @brief Handle the user input if the state is SHOW_USERS
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input_show_users(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
@@ -317,6 +412,11 @@ void StealthcomStateMachine::handle_input_show_users(const std::string& input) {
     }
 }
 
+/**
+ * @brief Handle the user input if the state is SETTINGS
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input_settings(const std::string& input) {
     if(input == "..") {
         apply_settings();
@@ -341,12 +441,22 @@ void StealthcomStateMachine::handle_input_settings(const std::string& input) {
     }
 }
 
+/**
+ * @brief Handle the user input if the state is DETAILS
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input_details(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
     }
 }
 
+/**
+ * @brief Handle the user input if the state is CONNECTION_REQUESTS
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input_connection_requests(const std::string& input) {
     if(input == "..") {
         set_state(MENU);
@@ -373,6 +483,11 @@ void StealthcomStateMachine::handle_input_connection_requests(const std::string&
     }
 }
 
+/**
+ * @brief Pass the user input to the appropriate handler
+ * 
+ * @param input the user input string
+ */
 void StealthcomStateMachine::handle_input(const std::string& input) {
     switch(state) {
         case ENTER_USER_ID: {
@@ -407,23 +522,48 @@ void StealthcomStateMachine::handle_input(const std::string& input) {
     }
 }
 
+/**
+ * @brief Get the current state of the state machine
+ * 
+ * @return State state
+ */
 State StealthcomStateMachine::get_state() {
     return state;
 }
 
+/**
+ * @brief Get the connection context of the state machine
+ * 
+ * @return ConnectionContext connection_context
+ */
 ConnectionContext StealthcomStateMachine::get_connection_context() {
     return connection_context;
 }
 
+/**
+ * @brief Set the connection state of the state machine
+ * 
+ * @param state the ConnectionState to set for connection_context
+ */
 void StealthcomStateMachine::set_connection_state(ConnectionState state) {
     connection_context.connection_state = state;
 }
 
+/**
+ * @brief Set the connection state and user of the state machine
+ * 
+ * @param state the ConnectionState to set for connection_context
+ * @param user the StealthcomUser* to set for connection_context
+ */
 void StealthcomStateMachine::set_connection_state_and_user(ConnectionState state, StealthcomUser *user) {
     connection_context.connection_state = state;
     connection_context.user = user;
 }
 
+/**
+ * @brief Reset connection_context to its default values
+ * 
+ */
 void StealthcomStateMachine::reset_connection_context() {
     StealthcomUser *user = connection_context.user;
     if(connection_context.connection_state == AWAITING_CONNECTION_RESPONSE) {
