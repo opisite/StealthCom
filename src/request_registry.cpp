@@ -6,8 +6,16 @@
 
 #define TIME_TO_LIVE 30
 
+/**
+ * @brief Construct a new Request Registry:: Request Registry object
+ * 
+ */
 RequestRegistry::RequestRegistry() : Registry(), registry_updated(true) {}
 
+/**
+ * @brief Destroy the Request Registry:: Request Registry object
+ * 
+ */
 RequestRegistry::~RequestRegistry() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto& entry : registry) {
@@ -16,6 +24,10 @@ RequestRegistry::~RequestRegistry() {
     }
 }
 
+/**
+ * @brief To be called by the registry manager thread once every second.
+ *          Once per call, decrement all TTL values and remove expired entries
+ */
 void RequestRegistry::decrement_ttl_and_remove_expired() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto it = registry.begin(); it != registry.end(); ) {
@@ -34,6 +46,12 @@ void RequestRegistry::decrement_ttl_and_remove_expired() {
     }
 }
 
+/**
+ * @brief Add an entry to the request registry or update the entry of an existing user
+ * 
+ * @param MAC the MAC address of the user to be added (or updated) to the registry
+ * @param direction the inbound or outbound direction of the request being sent
+ */
 void RequestRegistry::add_or_update_entry(const uint8_t* MAC, bool direction) {
     std::string MAC_str = mac_addr_to_str(MAC);
 
@@ -62,6 +80,11 @@ void RequestRegistry::add_or_update_entry(const uint8_t* MAC, bool direction) {
     }
 }
 
+/**
+ * @brief Get a list of all connection requests (excluding outbound)
+ * 
+ * @return std::vector<StealthcomUser*> a vector containing all requests
+ */
 std::vector<StealthcomUser*> RequestRegistry::get_requests() {
     std::lock_guard<std::mutex> lock(registryMutex);
     std::vector<StealthcomUser*> users;
@@ -74,16 +97,33 @@ std::vector<StealthcomUser*> RequestRegistry::get_requests() {
     return users;
 }
 
+/**
+ * @brief Check if there is an active connection request associated with a MAC address
+ * 
+ * @param MAC the MAC address to check against
+ * @return true if a connection request exists associated with MAC
+ * @return false if no connection request exists associated with MAC
+ */
 bool RequestRegistry::has_active_request(const std::string& MAC) {
     std::lock_guard<std::mutex> lock(registryMutex);
     auto it = registry.find(MAC);
     return it != registry.end();
 }
 
+/**
+ * @brief check to see if registry has been updated since the last time this was called
+ * 
+ * @return true if the registry was updated since the last call
+ * @return false if the registry was not updated since the last call
+ */
 bool RequestRegistry::registry_update() {
     return registry_updated;
 }
 
+/**
+ * @brief Raise the updated flag
+ * 
+ */
 void RequestRegistry::raise_update_flag() {
     registry_updated = true;;
 }

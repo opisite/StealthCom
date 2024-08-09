@@ -61,11 +61,19 @@ static void status_init(StealthcomUser *user, bool initiator) {
     status->dh_params_delivered.store(false);
 }
 
+/**
+ * @brief stops the key exchange process
+ * 
+ */
 static void terminate_key_exchange() {
     state_machine->reset_connection_context();
     status->key_exchange_stop_flag.store(true);
 }
 
+/**
+ * @brief Generates a private key using parameters received by the initiator (this is to be used by the DH responder)
+ * 
+ */
 static void generate_private_key() {
     system_push_msg("Crypto: Generating private key...");
 
@@ -122,6 +130,10 @@ static void generate_private_key() {
     BN_free(p_minus_1);
 }
 
+/**
+ * @brief Generates a public key using parameters received by the initiator (this is to be used by the DH responder)
+ * 
+ */
 static void generate_public_key() {
     system_push_msg("Crypto: Generating public key...");
 
@@ -203,6 +215,11 @@ static void generate_public_key() {
     DH_free(dh);
 }
 
+/**
+ * @brief send an ack in response to DH params or pub key
+ * 
+ * @param subtype the subtype of the ACK to be sent (PUB_KEY_ACK or DH_PARAMS_ACK)
+ */
 static void send_ack(int subtype) {
     stealthcom_L2_extension *ext = generate_ext(KEY_EX | subtype,
                                                 status->user->getMAC());
@@ -214,6 +231,11 @@ static void send_ack(int subtype) {
     free(ext);
 }
 
+/**
+ * @brief Save the incoming pubkey into memory
+ * 
+ * @param ext the stealthcom_L2_extenstion containing the pubkey payload
+ */
 static void save_pub_key(stealthcom_L2_extension *ext) {
     pub_key_payload *payload = (pub_key_payload *)ext->payload;
 
@@ -232,6 +254,11 @@ static void save_pub_key(stealthcom_L2_extension *ext) {
     system_push_msg("Crypto: Received pubkey from peer");
 }
 
+/**
+ * @brief Populate a pub_key_payload struct with the generated pubkey (as DH responder)
+ * 
+ * @param payload the payload to copy the pubkey into
+ */
 static void populate_payload(pub_key_payload *payload) {
     if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES) {
         system_push_msg("Crypto Error: Vector size does not match expected: " + std::to_string(params->pub_key_byte_vector.size()));
@@ -242,6 +269,10 @@ static void populate_payload(pub_key_payload *payload) {
     std::copy(params->pub_key_byte_vector.begin(), params->pub_key_byte_vector.end(), payload->pub_key);
 }
 
+/**
+ * @brief Generate an L2 extension with the pubkey payload appended to the end and deliver it to the DH initiator
+ * 
+ */
 static void deliver_pub_key() {
     pub_key_payload payload;
     ext_payload_len_t payload_size = sizeof(payload);
@@ -260,6 +291,10 @@ static void deliver_pub_key() {
     free(ext);
 }
 
+/**
+ * @brief wait to receive the DH responders pubkey
+ * 
+ */
 static inline void wait_for_pub_key() {
     while(!status->have_peer_pub_key.load() && !status->key_exchange_stop_flag.load()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -297,6 +332,11 @@ static void save_dh_params(stealthcom_L2_extension *ext) {
     system_push_msg("Crypto: Received DH params from peer");
 }
 
+/**
+ * @brief Save the incoming DH params into memory
+ * 
+ * @param ext the stealthcom_L2_extenstion containing the DH params payload
+ */
 static void populate_payload(dh_params_payload *payload) {
     if (params->pub_key_byte_vector.size() != PARAM_LEN_BYTES ||
         params->p_byte_vector.size() != PARAM_LEN_BYTES ||
@@ -313,6 +353,10 @@ static void populate_payload(dh_params_payload *payload) {
     std::copy(params->g_byte_vector.begin(), params->g_byte_vector.end(), payload->g);
 }
 
+/**
+ * @brief Generate an L2 extension with a DH params payload appended to the end and deliver it to the DH responder
+ * 
+ */
 static bool deliver_dh_params() {
     dh_params_payload payload;
     ext_payload_len_t payload_size = sizeof(payload);
@@ -333,6 +377,10 @@ static bool deliver_dh_params() {
     free(ext);
 }
 
+/**
+ * @brief generate prime modulo, generator, private key, public key as DH initiator
+ * 
+ */
 static void generate_dh_key_pair() {
     system_push_msg("Crypto: Generating DH key pair as initiator");
 
@@ -408,6 +456,11 @@ static void generate_dh_key_pair() {
     system_push_msg("Crypto: Generated DH params");
 }
 
+/**
+ * @brief Generate a shared secret using all DH params. This should be done after initiator and responder successfully exchange pubkeys
+ * 
+ * @return std::vector<unsigned char> a byte vector containing the shared secret
+ */
 static std::vector<unsigned char> compute_shared_secret() {
     system_push_msg("Crypto: Received all DH parameters, generating shared secret");
     if (params->priv_key_byte_vector.empty() || params->peer_pub_key_byte_vector.empty() ||
@@ -479,7 +532,12 @@ static std::vector<unsigned char> compute_shared_secret() {
     return shared_secret;
 }
 
-
+/**
+ * @brief Derive the encryption key using the shared secret
+ * 
+ * @param shared_secret the shared secret derived by compute_shared_secret()
+ * @return std::vector<unsigned char> a byte vector containing the encryption key
+ */
 static std::vector<unsigned char> derive_encryption_key(const std::vector<unsigned char>& shared_secret) {
     system_push_msg("Crypto: Deriving encryption key");
 
@@ -535,6 +593,10 @@ static std::vector<unsigned char> derive_encryption_key(const std::vector<unsign
     return encryption_key;
 }
 
+/**
+ * @brief facilitate DH key exchange as the responder
+ * 
+ */
 static void dh_responder() {
     while(!status->have_peer_pub_key.load() && !status->key_exchange_stop_flag.load()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -549,12 +611,24 @@ static void dh_responder() {
     }
 }
 
+/**
+ * @brief facilitate DH key exchange as the initiator
+ * 
+ * @return true 
+ * @return false 
+ */
 static bool dh_initiator() {
     generate_dh_key_pair();
     deliver_dh_params();
     wait_for_pub_key();
 }
 
+/**
+ * @brief (thread) facilitate the DH key exchange and generation of encryption keys for both the initiator and responder
+ * 
+ * @param user the user that the key exchange is being done with
+ * @param initiator whether this device is the initiator or responder
+ */
 void key_exchange_thread(StealthcomUser *user, bool initiator) {
     user_registry->protect_users();
 
@@ -585,6 +659,11 @@ void key_exchange_thread(StealthcomUser *user, bool initiator) {
     user_registry->unprotect_users();
 }
 
+/**
+ * @brief handle all packets received with type KEY_EX
+ * 
+ * @param ext the stealthcom_L2_extension with type KEY_EX
+ */
 void key_exchange_packet_handler(stealthcom_L2_extension *ext) {
     uint8_t subtype = (uint8_t)ext->type & EXT_SUBTYPE_BITMASK;
 
@@ -649,6 +728,14 @@ void key_exchange_packet_handler(stealthcom_L2_extension *ext) {
 static const unsigned int IV_LEN = 16;
 static const unsigned int TAG_LEN = 16;
 
+/**
+ * @brief Encrypt a buffer using the encryption key
+ * 
+ * @param buffer the buffer to be encrypted
+ * @param length the length of the input buffer
+ * @param out_length a reference to location where the encrypted buffer size should be stored
+ * @return void* a pointer to a buffer containing the encrypted data with size out_length
+ */
 void* encrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length) {
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) {
@@ -713,6 +800,14 @@ void* encrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length
     return ciphertext;
 }
 
+/**
+ * @brief Decrypt a buffer using the encryption key
+ * 
+ * @param buffer the buffer to be decrypted
+ * @param length the length of the input buffer
+ * @param out_length a reference to location where the decrypted buffer size should be stored
+ * @return void* a pointer to a buffer containing the decrypted data with size out_length
+ */
 void* decrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length) {
     if (length < IV_LEN + TAG_LEN) {
         system_push_msg("Crypto Error: Ciphertext too short");
@@ -776,6 +871,10 @@ void* decrypt(const unsigned char* buffer, uint16_t length, uint16_t& out_length
     return plaintext;
 }
 
+/**
+ * @brief Print the encryption key to the main window
+ * 
+ */
 void print_encryption_key() {
     if (encryption_key.empty()) {
         main_push_msg("N/A");
