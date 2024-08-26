@@ -30,6 +30,10 @@ static std::mutex mtx;
 static int main_win_line = INITIAL_WINDOW_LINE;
 static int system_win_line = INITIAL_WINDOW_LINE;
 
+/**
+ * @brief Draw the system window box on the screen
+ * 
+ */
 static void draw_sys_window() {
     werase(system_win_buffer);
     box(system_win_buffer, 0, 0);
@@ -37,6 +41,10 @@ static void draw_sys_window() {
     wrefresh(system_win_buffer);
 }
 
+/**
+ * @brief Draw the main window box on the screen
+ * 
+ */
 static void draw_main_window() {
     werase(main_win_buffer);
     box(main_win_buffer, 0, 0);
@@ -44,6 +52,10 @@ static void draw_main_window() {
     wrefresh(main_win_buffer);
 }
 
+/**
+ * @brief Initialize ncurses and all boxes
+ * 
+ */
 void ncurses_init() {
     initscr();
     cbreak();
@@ -80,6 +92,10 @@ void ncurses_init() {
     system_queue = new InputQueue();
 }
 
+/**
+ * @brief Clear the output on the main window
+ * 
+ */
 void io_clr_output() {
     std::lock_guard<std::mutex> lock(mtx);
     main_queue->clear();
@@ -88,14 +104,28 @@ void io_clr_output() {
     draw_main_window();
 }
 
+/**
+ * @brief Print a message to the main window
+ * 
+ * @param message the string to print
+ */
 void main_push_msg(const std::string& message) {
     main_queue->push(message);
 }
 
+/**
+ * @brief Print a message to the system window
+ * 
+ * @param message the string to print
+ */
 void system_push_msg(const std::string& message) {
     system_queue->push(message);
 }
 
+/**
+ * @brief (thread) handle all IO operations through ncurses
+ * 
+ */
 void ncurses_thread() {
     std::stringstream buffer;
     std::streambuf* old = std::cerr.rdbuf(buffer.rdbuf());

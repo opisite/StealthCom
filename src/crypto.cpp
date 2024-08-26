@@ -19,6 +19,8 @@
 #define KEY_LEN_BITS     256
 #define KEY_LEN_BYTES    (KEY_LEN_BITS / 8)
 
+// TODO: add error types and key exchange abort functionality
+
 typedef struct {
     StealthcomUser *user;
     bool initiator;
