@@ -26,10 +26,22 @@ static inline uint64_t get_current_time() {
     return std::chrono::duration_cast<std::chrono::seconds>(duration).count();
 }
 
+/**
+ * @brief A comparator to check the order of 2 messages (by sequence number)
+ * 
+ * @param a message a
+ * @param b message b
+ * @return true if a came before b
+ * @return false if b came before a
+ */
 static bool compare_msg_sequence(const Message* a, const Message* b) {
     return a->sequence_num < b->sequence_num;
 }
 
+/**
+ * @brief (thread) deliver all messages in the outbound_message_queue
+ * 
+ */
 static void deliver_messages_thread() {
     while(true) {
         const Message *msg = outbound_message_queue->pop();
@@ -49,6 +61,11 @@ static void deliver_messages_thread() {
     }
 }
 
+/**
+ * @brief Send an ACK for an incoming message
+ * 
+ * @param seq_num the sequence number of the incoming message
+ */
 static void send_data_ack(const sequence_num_t seq_num) {
     ConnectionContext context = state_machine->get_connection_context();
     StealthcomUser *user = context.user;
@@ -57,6 +74,11 @@ static void send_data_ack(const sequence_num_t seq_num) {
     send_packet(ext);
 }
 
+/**
+ * @brief handle an incoming ACK
+ * 
+ * @param ext the extension containing the sequence number that is being ACK'ed
+ */
 static void handle_data_ack(stealthcom_L2_extension *ext) {
     sequence_num_t *ack_num = (sequence_num_t *)ext->payload;
     if(data_registry->entry_exists(*ack_num)) {
@@ -71,6 +93,11 @@ static void handle_data_ack(stealthcom_L2_extension *ext) {
     }
 }
 
+/**
+ * @brief Handle and incoming data packet
+ * 
+ * @param ext the extention containing the data
+ */
 static void handle_data(stealthcom_L2_extension *ext) {
     unsigned char *encrypted_msg = ext->payload;
     uint16_t decrypted_msg_size;
@@ -97,6 +124,10 @@ static void handle_data(stealthcom_L2_extension *ext) {
     display_messages();
 }
 
+/**
+ * @brief handle all incoming packets with type DATA
+ * 
+ */
 static void handle_data_thread() {
     while(true) {
         std::unique_ptr<packet_wrapper> ext_wrapper = data_pkt_queue->pop();
@@ -111,10 +142,20 @@ static void handle_data_thread() {
     }
 }
 
+/**
+ * @brief Resend a message with a particular sequence number
+ * 
+ * @param seq_number the sequence number of the packet to resend
+ */
 void resend_message(sequence_num_t seq_number) {
     send_message(outbound_messages[seq_number].msg);
 }
 
+/**
+ * @brief generate a stealthcom_L2_extension with a message appended to the end and send it as a packet
+ * 
+ * @param msg the message to send
+ */
 void send_message(const Message *msg) {
     ConnectionContext context = state_machine->get_connection_context();
     StealthcomUser *user = context.user;
@@ -127,6 +168,11 @@ void send_message(const Message *msg) {
     send_packet(ext);
 }
 
+/**
+ * @brief Initialize the threads needed to send and receive data as well as the shared resources needed by them
+ * 
+ * @param inbound_queue a shared queue for inbound data packets
+ */
 void data_worker_init(std::shared_ptr<PacketQueue> inbound_queue) {
     outbound_message_queue = new MessageQueue();
     data_pkt_queue = inbound_queue;
@@ -137,10 +183,21 @@ void data_worker_init(std::shared_ptr<PacketQueue> inbound_queue) {
     HandleDataThread.detach();
 }
 
+/**
+ * @brief reset data logic
+ * 
+ */
 void data_logic_reset() {
     sequence_number = 0;
+    // TODO: empty all vectors and queues used by this module
+    // TODO: empty data registry
 }
 
+/**
+ * @brief Create and push to outbound queue a Message struct containing the users message
+ * 
+ * @param input user string to be used to create a message
+ */
 void create_message(const std::string& input) {
     uint8_t input_len = input.size() + 1; // Including space for a null character
 
@@ -153,6 +210,12 @@ void create_message(const std::string& input) {
     outbound_message_queue->push(msg);
 }
 
+/**
+ * @brief To be called by the data registry if a message fails to be delivered.
+ *          changes the status of the message and updates the screen to display the message status
+ * 
+ * @param seq_num the sequence number of the message that failed to send
+ */
 void notify_send_fail(sequence_num_t seq_num) {
     {
         std::lock_guard<std::mutex> lock(msg_mutex);
@@ -161,11 +224,21 @@ void notify_send_fail(sequence_num_t seq_num) {
     display_messages();
 }
 
+/**
+ * @brief print a single formatted inbound message to the main window
+ * 
+ * @param msg the message to be displayed
+ */
 static void print_inbound_msg(const Message *msg) {
     StealthcomUser *user = state_machine->get_connection_context().user;
     main_push_msg(user->getName() + ": " + std::string(msg->payload));
 }
 
+/**
+ * @brief print a single formatted outbound message to the main window
+ * 
+ * @param msg a MessageWrapper containing the message to be displayed as well as its sent status
+ */
 static void print_outbound_msg(const MessageWrapper msg) {
     std::string status_str;
     switch (msg.status) {
@@ -186,6 +259,10 @@ static void print_outbound_msg(const MessageWrapper msg) {
     main_push_msg(status_str + " - " + std::string(msg.msg->payload));
 }
 
+/**
+ * @brief Display all messages to the screen
+ * 
+ */
 void display_messages() {
     if(state_machine->get_state() != CHAT) {
         return;

@@ -6,8 +6,16 @@
 #define TIME_TO_LIVE 10
 #define CONNECTED_TIME_TO_LIVE 60
 
+/**
+ * @brief Construct a new User Registry:: User Registry object
+ * 
+ */
 UserRegistry::UserRegistry() : Registry(), registry_updated(true) {}
 
+/**
+ * @brief Destroy the User Registry:: User Registry object
+ * 
+ */
 UserRegistry::~UserRegistry() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto& entry : registry) {
@@ -16,6 +24,11 @@ UserRegistry::~UserRegistry() {
     }
 }
 
+/**
+ * @brief To be called by the registry manager thread once every second.
+ *          Once per call, decrement all TTL values and remove expired entries
+ * 
+ */
 void UserRegistry::decrement_ttl_and_remove_expired() {
     std::lock_guard<std::mutex> lock(registryMutex);
     for (auto it = registry.begin(); it != registry.end(); ) {
@@ -34,6 +47,12 @@ void UserRegistry::decrement_ttl_and_remove_expired() {
     }
 }
 
+/**
+ * @brief Add an entry to the user registry or update the entry of an existing user
+ * 
+ * @param MAC the MAC address of the user to be added (or updated) to the registry
+ * @param user_ID the user ID of the user to be added (or updated) to the registry
+ */
 void UserRegistry::add_or_update_entry(const uint8_t* MAC, std::string user_ID) {
     std::string MAC_str = mac_addr_to_str(MAC);
 
@@ -54,6 +73,11 @@ void UserRegistry::add_or_update_entry(const uint8_t* MAC, std::string user_ID) 
     }
 }
 
+/**
+ * @brief Get a list of all known users
+ * 
+ * @return std::vector<StealthcomUser*> a vector containing pointers to all known users 
+ */
 std::vector<StealthcomUser*> UserRegistry::get_users() {
     std::lock_guard<std::mutex> lock(registryMutex);
     std::vector<StealthcomUser*> users;
@@ -64,6 +88,13 @@ std::vector<StealthcomUser*> UserRegistry::get_users() {
     return users;
 }
 
+/**
+ * @brief Get a StealthcomUser object by MAC address
+ * 
+ * @param MAC the MAC address to search for in the registry
+ * @return StealthcomUser* a pointer to the corresponding StealthcomUser
+ *         nullptr if there is no user corresponding to MAC
+ */
 StealthcomUser * UserRegistry::get_user(std::string& MAC) {
     std::lock_guard<std::mutex> lock(registryMutex);
     auto it = registry.find(MAC);
@@ -75,6 +106,11 @@ StealthcomUser * UserRegistry::get_user(std::string& MAC) {
     }
 }
 
+/**
+ * @brief To be called once the connection state changes to CONNECTED
+ * 
+ * @param user the StealthcomUser that is connectedc to
+ */
 void UserRegistry::notify_connect(StealthcomUser *user) {
     std::string MAC_str = mac_addr_to_str(user->getMAC().data());
     auto it = registry.find(MAC_str);
@@ -85,18 +121,36 @@ void UserRegistry::notify_connect(StealthcomUser *user) {
     }
 }
 
+/**
+ * @brief prevent the registry manager from removing expired entries
+ * 
+ */
 void UserRegistry::protect_users() {
     users_protected.store(true);
 }
 
+/**
+ * @brief allow the registry manager to remove expired entries
+ * 
+ */
 void UserRegistry::unprotect_users() {
     users_protected.store(false);
 }
 
+/**
+ * @brief check to see if registry has been updated since the last time this was called
+ * 
+ * @return true if the registry was updated since the last call
+ * @return false if the registry was not updated since the last call
+ */
 bool UserRegistry::registry_update() {
     return registry_updated;
 }
 
+/**
+ * @brief Raise the updated flag
+ * 
+ */
 void UserRegistry::raise_update_flag() {
     registry_updated = true;
 }

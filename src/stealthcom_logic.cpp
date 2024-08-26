@@ -26,6 +26,11 @@ std::shared_ptr<UserRegistry> user_registry;
 std::shared_ptr<RequestRegistry> request_registry;
 std::shared_ptr<DataRegistry> data_registry;
 
+/**
+ * @brief Initialize shared resources and threads at the start of the program
+ * 
+ * @param netif the network interface to use
+ */
 void stealthcom_init(const char *netif) {
     ncurses_init();
 
@@ -57,6 +62,10 @@ void stealthcom_init(const char *netif) {
     stealthcom_main_thread();
 }
 
+/**
+ * @brief (thread) sequentially handle user inputs
+ * 
+ */
 void stealthcom_main_thread() {
     while(true) {
         std::string msg = input_queue->pop();
@@ -65,6 +74,11 @@ void stealthcom_main_thread() {
 
 }
 
+/**
+ * @brief API called by io_handler to push messages to a queue to be popped by stealthcom_main_thread()
+ * 
+ * @param message 
+ */
 void input_push_msg(const std::string message) {
     input_queue->push(message);
 }

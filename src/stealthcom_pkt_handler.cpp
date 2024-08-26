@@ -24,6 +24,12 @@ static std::shared_ptr<PacketQueue> tx_queue;
 static std::shared_ptr<PacketQueue> connect_pkt_queue;
 static std::shared_ptr<PacketQueue> data_pkt_queue;
 
+/**
+ * @brief Initialize the packet handler
+ * 
+ * @param rx packet queue containing received packets from packet_rx_tx.c
+ * @param tx packets queue containing packets to be transmitted
+ */
 void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     rx_queue = rx;
     tx_queue = tx;
@@ -40,6 +46,11 @@ void stealthcom_pkt_handler_init(std::shared_ptr<PacketQueue> rx, std::shared_pt
     advertise_stop_flag.store(false);
 }
 
+/**
+ * @brief Transmit a stealthcom_L2_extension. Appends a dummy probe request to the beginning then hands the buffer over to tx_queue
+ * 
+ * @param ext the extenstion to be transmitted
+ */
 void send_packet(stealthcom_L2_extension * ext) {
     static stealthcom_header hdr_template = {
         .frame_ctrl =               {0x40, 0x00},
@@ -67,6 +78,12 @@ void send_packet(stealthcom_L2_extension * ext) {
     tx_queue->push(std::move(packet));
 }
 
+/**
+ * @brief Generate a stealthcom_L2_extension with type only
+ * 
+ * @param type the type of stealthcom_L2_extension to generate
+ * @return stealthcom_L2_extension* a pointer to stealthcom_L2_extension with type (type)
+ */
 stealthcom_L2_extension * generate_ext(sc_pkt_type_t type) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
@@ -83,6 +100,13 @@ stealthcom_L2_extension * generate_ext(sc_pkt_type_t type) {
     return ext;
 }
 
+/**
+ * @brief Generate a stealthcom_L2_extension with destination address
+ * 
+ * @param type the type of stealthcom_L2_extension to generate
+ * @param dest_MAC the MAC address to address the extenstion to
+ * @return stealthcom_L2_extension* stealthcom_L2_extension* a pointer to stealthcom_L2_extension with type (type) and dest_MAC (dest_MAC)
+ */
 stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
@@ -99,6 +123,15 @@ stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6
     return ext;
 }
 
+/**
+ * @brief Generate a stealthcom_L2_extension with destination address and payload
+ * 
+ * @param type the type of stealthcom_L2_extension to generate
+ * @param dest_MAC the MAC address to address the extenstion to
+ * @param payload_len length of the payload to append to the end of the stealthcom_L2_extension
+ * @param payload a pointer to a buffer with length payload_len
+ * @return stealthcom_L2_extension* a pointer to stealthcom_L2_extension with type (type) and dest_MAC (dest_MAC) and a paylaod (paylaod) appended to the end
+ */
 stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6> dest_MAC, ext_payload_len_t payload_len, const char *payload) {
     const uint8_t *this_MAC = get_MAC();
     std::string this_user_ID = get_user_ID();
@@ -116,6 +149,13 @@ stealthcom_L2_extension * generate_ext(sc_pkt_type_t type, std::array<uint8_t, 6
     return ext;
 }
 
+/**
+ * @brief Check if a received stealthcom packet is being broadcast (beacon)
+ * 
+ * @param ext the received buffer
+ * @return true if the packet is broadcast
+ * @return false if the packet is not broadcast
+ */
 static inline bool check_dest_beacon(const struct stealthcom_L2_extension *ext) {
     for(int x = 0; x < 6; x++) {
         if(ext->dest_MAC[x] != 0xFF) {
@@ -125,6 +165,13 @@ static inline bool check_dest_beacon(const struct stealthcom_L2_extension *ext) 
     return true;
 }
 
+/**
+ * @brief Check if a received stealthcom packet is addressed to self
+ * 
+ * @param ext the received buffer
+ * @return true if the packet is addressed to self
+ * @return false if the packet is not addressed to self
+ */
 static inline bool check_dest_self(const struct stealthcom_L2_extension *ext) {
     for(int x = 0; x < 6; x++) {
         if(ext->dest_MAC[x] != this_MAC[x]) {
@@ -134,6 +181,13 @@ static inline bool check_dest_self(const struct stealthcom_L2_extension *ext) {
     return true;
 }
 
+/**
+ * @brief Check if the source of a stealthcom packet is self
+ * 
+ * @param ext the received buffer
+ * @return true if the packet is comes from self
+ * @return false if the packet does not come from self
+ */
 static inline bool check_source_self(const struct stealthcom_L2_extension *ext) {
     for(int x = 0; x < 6; x++) {
         if(ext->source_MAC[x] != this_MAC[x]) {
@@ -143,10 +197,24 @@ static inline bool check_source_self(const struct stealthcom_L2_extension *ext) 
     return true;
 }
 
+/**
+ * @brief Check if this is the intended recipient of a stealthcom packet
+ * 
+ * @param ext the received buffer
+ * @return true if recipient
+ * @return false if not recipient
+ */
 static inline bool is_recipient(const struct stealthcom_L2_extension *ext) {
     return (!check_source_self(ext) && (check_dest_self(ext) || check_dest_beacon(ext)));
 }
 
+/**
+ * @brief Check if an incoming stealthcom packet comes from a valid source
+ * 
+ * @param ext stealthcom packet
+ * @return true if source valid
+ * @return false if source not valid
+ */
 static inline bool valid_source(const struct stealthcom_L2_extension *ext) {
     ConnectionContext ctx = state_machine->get_connection_context();
     if(ctx.connection_state == UNASSOCIATED) {
@@ -162,10 +230,19 @@ static inline bool valid_source(const struct stealthcom_L2_extension *ext) {
     return true;
 }
 
+/**
+ * @brief Handle a stealthcom packet with type BEACON
+ * 
+ * @param ext 
+ */
 static void handle_stealthcom_beacon(struct stealthcom_L2_extension *ext) {
     return;
 }
 
+/**
+ * @brief (thread) handle all received stealthcom packets
+ * 
+ */
 void packet_handler_thread() {
     while(true) {
         std::unique_ptr<packet_wrapper> pkt_wrapper = rx_queue->pop();
@@ -219,6 +296,11 @@ void packet_handler_thread() {
     }
 }
 
+/**
+ * @brief Set this user advertising
+ * 
+ * @param set 0 to stop advertising - 1 to start advertising
+ */
 void set_advertise(int set) {
     if(set == 0) {
         advertise_stop_flag.store(true);
@@ -228,6 +310,10 @@ void set_advertise(int set) {
     }
 }
 
+/**
+ * @brief (thread) transmit a beacon frame once per second
+ * 
+ */
 void user_advertise_thread() {
     stealthcom_L2_extension *ext = generate_ext(BEACON);
 

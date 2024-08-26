@@ -25,6 +25,13 @@ static std::shared_ptr<PacketQueue> tx_queue;
 
 const char *netif;
 
+/**
+ * @brief Check if a packet is a stealthcom packet (source MAC is AA:AA:AA:AA:AA:AA)
+ * 
+ * @param hdr the MAC header to check
+ * @return true if the packet is a stealthcom packet
+ * @return false if the packet is not a stealthcom packet
+ */
 static inline bool is_stealthcom_packet(const wifi_mac_hdr_t *hdr) {
     for(int x = 0; x < 6; x++) {
         if(hdr->addr2[x] != 0xAA) {
@@ -34,9 +41,14 @@ static inline bool is_stealthcom_packet(const wifi_mac_hdr_t *hdr) {
     return true;
 }
 
-/*
-    Append a radiotap header at the beginning of the packet to be sent by packet_tx thread
-*/
+/**
+ * @brief Append a radiotap header at the beginning of the packet to be sent by packet_tx thread
+ * 
+ * @param buf the packet to append the header to
+ * @param buf_len the length of buf
+ * @param final_packet_size the length of the new buffer
+ * @return const u_char* A pointer to a new buffer with containing the original packet with the radiotap header appended at the start
+ */
 static const u_char * append_radiotap_header(void *buf, int buf_len, int *final_packet_size) {
     static const radiotap_header_t default_radiotap_header = {
         .it_version = 0,
@@ -54,9 +66,10 @@ static const u_char * append_radiotap_header(void *buf, int buf_len, int *final_
     return new_buf;
 }
 
-/*
-    Open a raw socket, then send give all received packets to packet_rx
-*/
+/**
+ * @brief (thread) Open a raw socket, then send give all received packets to packet_rx
+ * 
+ */
 void packet_capture_wrapper() {
     int sockfd;
     char buffer[ETH_FRAME_LEN];
@@ -100,9 +113,12 @@ void packet_capture_wrapper() {
     close(sockfd);
 }
 
-/*
-    Handle all packets received via netif
-*/
+/**
+ * @brief Handle all packets received via netif
+ * 
+ * @param buffer incoming packet buffer
+ * @param buffer_len length of buf
+ */
 void packet_rx(void *buffer, int buffer_len) {
     radiotap_header_t *radiotap_header = (radiotap_header_t *)buffer;
     wifi_mac_hdr_t *mac_hdr = (wifi_mac_hdr_t *)((uint8_t *)buffer + radiotap_header->it_len);
@@ -123,9 +139,10 @@ void packet_rx(void *buffer, int buffer_len) {
     
 }
 
-/*
-    Transmit packets in the tx_queue
-*/
+/**
+ * @brief (thread) Transmit packets in the tx_queue
+ * 
+ */
 void packet_tx() {
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t *handle;
@@ -149,9 +166,15 @@ void packet_tx() {
     pcap_close(handle);
 }
 
-/*
-    Initialize rx_queue, tx_queue, and retrieve MAC address of the network interface controller from the system
-*/
+/**
+ * @brief Initialize rx_queue, tx_queue, and retrieve MAC address of the network interface controller from the system
+ * 
+ * @param device the network interface to use for the duration of the program
+ * @param rx packet queue for packets to be transmitted
+ * @param tx packet queue for received packets
+ * @return true if the initialization was successful
+ * @return false if the initalization was not successful
+ */
 bool packet_rx_tx_init(const char *device, std::shared_ptr<PacketQueue> rx, std::shared_ptr<PacketQueue> tx) {
     int fd;
     struct ifreq ifr;
