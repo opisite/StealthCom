@@ -10,3 +10,9 @@ Features include:
 StealthCom uses a simple and easy to use command based user interface. This program can be used on any Linux based device that has a network interface capable of monitor mode and raw packet injection
 
 Start the program using "sudo ./StealthCom \<wlan interface\>"
+
+
+
+
+https://github.com/user-attachments/assets/7b744e9a-1fb9-468b-bb5f-aee4c4e41b6b
+
